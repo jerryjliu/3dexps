@@ -1,82 +1,59 @@
+require 'torch'
 require 'nn'
-require 'xlua'
+require 'optim'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
+model_path = '/data/models/full_dataset_voxels/';
 
-cmd = torch.CmdLine()
-cmd:option('-gpu', 0, 'GPU id, starting from 1. Set it to 0 to run it in CPU mode. ')
-cmd:option('-class', 'chair', 'class to run forward with. Use all to run all 5 classes')
-cmd:option('-sample', false, 'whether to sample input latent vectors from an i.i.d. uniform distribution, or to generate shapes with demo vectors')
-cmd:option('-bs', 100, 'batch size')
-cmd:option('-ss', 100, 'number of generated shapes, only used in `-sample` mode')
+opt = {
+  leakyslope = 0.2,
+}
 
-opt = cmd:parse(arg or {})
-if opt.gpu > 0 then 
-    require 'cunn'
-    require 'cudnn'
-    require 'cutorch'
-    cutorch.setDevice(opt.gpu)
-end
-all_classes = {'car', 'chair', 'desk', 'gun', 'sofa'}
-class_used = {}
-for _,c in ipairs(all_classes) do 
-    if c == opt.class or opt.class == 'all' then
-        class_used[#class_used+1] = c
-    end
-end
-assert(#class_used > 0, 'Invalid class name: '..opt.class)
--------------------------------------------------------------------------------
-for _,class in ipairs(class_used) do 
-    print("=====================================================")
-    print("==> Running with class: "..class)
-    print("==> Loading network")
-    if opt.gpu == 0 then 
-        netG = torch.load('./models_cpu/'..class..'_G_cpu.t7')
-    else
-        netG = torch.load('./models_gpu/'..class..'_G_gpu.t7')
-    end 
-    nz = netG:get(1).nInputPlane    -- latent vector dimensions
-    netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
-    netG:evaluate()
+real_label = 1
+fake_label = 0
 
-    print("==> Setting inputs")
-    if not opt.sample then 
-        inputs = mat.load('./demo_inputs/'..class..'.mat')['inputs']:double()
-    else 
-        inputs = torch.rand(opt.ss, nz)
-    end
-    num_points = inputs:size(1)
-    inputs = inputs:reshape(num_points, nz, 1, 1, 1) -- since matlab does not support singleton dimension. Reshape will fail if dimension does not match nz. 
-    all_res = torch.zeros(num_points, 1, 64, 64, 64):double()
+-- Generator
+local netG = nn.Sequential() 
+-- 200x1x1x1 -> 512x4x4x4
+netG:add(nn.VolumetricFullConvolution(200,512,4,4,4))
+netG:add(nn.VolumetricBatchNormalization(512))
+netG:add(nn.ReLU())
+-- 512x4x4x4 -> 256x8x8x8
+netG:add(nn.VolumetricFullConvolution(512,256,4,4,4,2,2,2,1,1,1))
+netG:add(nn.VolumetricBatchNormalization(256))
+netG:add(nn.ReLU())
+-- 256x8x8x8 -> 128x16x16x16
+netG:add(nn.VolumetricFullConvolution(256,128,4,4,4,2,2,2,1,1,1))
+netG:add(nn.VolumetricBatchNormalization(128))
+netG:add(nn.ReLU())
+-- 128x16x16x16 -> 64x32x32x32
+netG:add(nn.VolumetricFullConvolution(128,64,4,4,4,2,2,2,1,1,1))
+netG:add(nn.VolumetricBatchNormalization(64))
+netG:add(nn.ReLU())
+-- 64x32x32x32 -> 1x64x64x64
+netG:add(nn.VolumetricFullConvolution(64,1,4,4,4,2,2,2,1,1,1))
+netG:add(nn.Sigmoid())
 
-    input = torch.zeros(opt.bs, nz, 1, 1, 1)
-
-    if opt.gpu > 0 then 
-        netG = netG:cuda()
-        netG = cudnn.convert(netG, cudnn)
-        input = input:cuda()
-    end
-
-    print("==> Forward propagation")
-    for i = 1, math.ceil(num_points / opt.bs) do
-        ind_low = (i-1) * opt.bs + 1
-        ind_high = math.min(i * opt.bs, num_points)
-        input:zero()
-        input[{{1, ind_high-ind_low+1},{},{},{},{}}] = inputs[{{ind_low, ind_high},{},{},{},{}}]
-        res = netG:forward(input):double()
-        all_res[{{ind_low, ind_high},{},{},{},{}}] = res[{{1, ind_high-ind_low+1},{},{},{},{}}]
-    end
-
-    print("==> Saving result")
-    os.execute('mkdir -p ./output')
-    if opt.sample then 
-        savename = class..'_sample.mat' 
-    else 
-        savename = class..'_demo.mat'
-    end
-    savename = sys.concat('./output', savename)
-    mat.save(savename, {['inputs'] = inputs, ['voxels'] = all_res})
-
-    print("==> Saving done")
-end
+-- Discriminator (same as Generator but uses LeakyReLU)
+local netD = nn.Sequential()
+-- 1x64x64x64 -> 64x32x32x32
+netD:add(nn.VolumetricConvolution(1,64,4,4,4,2,2,2,1,1,1))
+netD:add(nn.VolumetricBatchNormalization(64))
+netD:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 64x32x32x32 -> 128x16x16x16
+netD:add(nn.VolumetricConvolution(64,128,4,4,4,2,2,2,1,1,1))
+netD:add(nn.VolumetricBatchNormalization(128))
+netD:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 128x16x16x16 -> 256x8x8x8
+netD:add(nn.VolumetricConvolution(128,256,4,4,4,2,2,2,1,1,1))
+netD:add(nn.VolumetricBatchNormalization(256))
+netD:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 256x8x8x8 -> 512x4x4x4
+netD:add(nn.VolumetricConvolution(256,512,4,4,4,2,2,2,1,1,1))
+netD:add(nn.VolumetricBatchNormalization(512))
+netD:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 512x4x4x4 -> 1x1x1x1
+netD:add(nn.VolumetricConvolution(512,1,4,4,4))
+netD:add(nn.Sigmoid())
+netD:add(nn.View(1):setNumInputDims(4))
 
