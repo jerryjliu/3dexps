@@ -15,6 +15,7 @@ opt = {
   nz = 200,
   niter = 25,
   gpu = 1,
+  name = 'shapenet101'
 }
 
 if opt.gpu > 0 then
@@ -122,8 +123,67 @@ if opt.gpu > 0 then
   netD = cudnn(netD, cudnn)
   criterion = criterion:cuda()
 end
+local parametersD, gradParametersD = netD:getParameters()
+local parametersG, gradParametersG = netG:getParameters()
+
+-- evaluate f(X), df/dX, discriminator
+local fDx = function(x)
+  gradParametersD:zero()
+
+  local real, rclasslabels = data:getBatch()
+  input:copy(real)
+  label:fill(real_label)
+  local rout = netD:forward(input)
+  local errD_real = criterion:forward(rout, label)
+  local df_do = criterion:backward(rout, label)
+  netD:backward(input, df_do)
+
+  noise:uniform(-1, 1)
+  local fake = netG:forward(noise)
+  input:copy(fake)
+  label:fill(fake_label)
+  local fout = netD:forward(input)
+  local errD_fake = criterion:forward(fout, label)
+  local df_do = criterion:backward(fout, label)
+  netD:backward(input, df_do)
+
+  errD = errD_real + errD_fake
+  return errD, gradParametersD
+end
+
+-- evaluate f(X), df/dX, generator
+local fGx = function(x)
+  gradParametersG:zero()
+  label:fill(real_label)
+
+  local output = netD.output
+  errG = criterion:forward(output, label)
+  local df_do = criterion:backward(output, label)
+  local df_dg = netD:updateGradInput(input, df_do)
+
+  netG:backward(input, df_dg)
+
+  return errG, gradParametersG
+end
+
 
 for epoch = 1, opt.niter do
   for i = 1, data:size(), opt.batchSize do
+    -- for each batch, first generate 50 generated samples and compute
+    -- BCE loss on generator and discriminator
+    optim.adam(fDx, parametersD, optimStateD)
+    optim.adam(fGx, parametersG, optimStateG)
+
+    -- logging
+    print(('Epoch: [%d][%8d / %8d]\t Err_G: %.4f Err_D: %.4f'):format(epoch, (i-1)/opt.batchSize, errG, errD))
   end
+  paths.mkdir('checkpoints')
+  parametersD, gradParametersD = nil,nil
+  parametersG, gradParametersG = nil,nil
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG:clearState())
+  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+  
+  parametersD, gradParametersD = netD:getParameters()
+  parametersG, gradParametersG = netG:getParameters()
+  print(('End of epoch %d / %d'):format(epoch, opt.niter))
 end
