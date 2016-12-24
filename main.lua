@@ -7,10 +7,12 @@ model_path = '/data/models/full_dataset_voxels/';
 
 opt = {
   leakyslope = 0.2,
-  glr = 0.0025,
-  dlr = 1e-5,
+  --glr = 0.0025,
+  glr = 0.00025,
+  dlr = 0.00003,
+  --dlr = 1e-5,
   beta1 = 0.5,
-  batchSize = 100,
+  batchSize = 60,
   nout = 64,
   nz = 200,
   niter = 25,
@@ -27,7 +29,9 @@ end
 
 -- Initialize data loader --
 local DataLoader = paths.dofile('data.lua')
+print('Loading all models into memory...')
 local data = DataLoader.new(opt)
+print('data size: ' .. data:size())
 ----------------------------
 
 real_label = 1
@@ -37,7 +41,7 @@ local function weights_init(m)
   local name = torch.type(m)
   if name:find('Convolution') then
     m.weight:normal(0.0, 0.02)
-    m.bias:fill(0)
+    --m:noBias()
   elseif name:find('BatchNormalization') then
     if m.weight then m.weight:normal(1.0, 0.02) end
     if m.bias then m.bias:fill(0) end
@@ -118,9 +122,9 @@ if opt.gpu > 0 then
   noise = noise:cuda()
   label = label:cuda()
   netG = netG:cuda()
-  netG = cudnn(netG, cudnn)
+  netG = cudnn.convert(netG, cudnn)
   netD = netD:cuda()
-  netD = cudnn(netD, cudnn)
+  netD = cudnn.convert(netD, cudnn)
   criterion = criterion:cuda()
 end
 local parametersD, gradParametersD = netD:getParameters()
@@ -130,7 +134,9 @@ local parametersG, gradParametersG = netG:getParameters()
 local fDx = function(x)
   gradParametersD:zero()
 
-  local real, rclasslabels = data:getBatch()
+  print('getting real batch')
+  local numCorrect = 0
+  local real, rclasslabels = data:getBatch(opt.batchSize)
   input:copy(real)
   label:fill(real_label)
   local rout = netD:forward(input)
@@ -138,6 +144,13 @@ local fDx = function(x)
   local df_do = criterion:backward(rout, label)
   netD:backward(input, df_do)
 
+  for i = 1,rout:size(1) do
+    if rout[{i,1}] > 0.5 then
+      numCorrect = numCorrect + 1
+    end
+  end
+
+  print('getting fake batch')
   noise:uniform(-1, 1)
   local fake = netG:forward(noise)
   input:copy(fake)
@@ -146,6 +159,21 @@ local fDx = function(x)
   local errD_fake = criterion:forward(fout, label)
   local df_do = criterion:backward(fout, label)
   netD:backward(input, df_do)
+
+  for i = 1,fout:size(1) do
+    if fout[{i,1}] < 0.5 then
+      numCorrect = numCorrect + 1
+    end
+  end
+
+  local accuracy = (numCorrect/(2*opt.batchSize))
+  print(('disc accuracy: %.4f'):format(accuracy))
+  if accuracy > 0.8 then
+    gradParametersD:zero()
+  end
+
+  print(errD_real)
+  print(errD_fake)
 
   errD = errD_real + errD_fake
   return errD, gradParametersD
@@ -156,12 +184,18 @@ local fGx = function(x)
   gradParametersG:zero()
   label:fill(real_label)
 
+  print('filled real label')
   local output = netD.output
+  print('forwarding output')
   errG = criterion:forward(output, label)
+  print('errG: ' .. errG)
+  print('..forwarded')
   local df_do = criterion:backward(output, label)
   local df_dg = netD:updateGradInput(input, df_do)
+  print('updated discriminator gradient input')
 
-  netG:backward(input, df_dg)
+  netG:backward(noise, df_dg)
+  print('accumulated G')
 
   return errG, gradParametersG
 end
@@ -171,11 +205,13 @@ for epoch = 1, opt.niter do
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
+    print('Optimizing disc')
     optim.adam(fDx, parametersD, optimStateD)
+    print('Optimizing gen')
     optim.adam(fGx, parametersG, optimStateG)
 
     -- logging
-    print(('Epoch: [%d][%8d / %8d]\t Err_G: %.4f Err_D: %.4f'):format(epoch, (i-1)/opt.batchSize, errG, errD))
+    print(('Epoch: [%d][%8d / %8d]\t Err_G: %.4f Err_D: %.4f'):format(epoch, (i-1)/opt.batchSize, math.floor(data:size()/opt.batchSize),errG, errD))
   end
   paths.mkdir('checkpoints')
   parametersD, gradParametersD = nil,nil
