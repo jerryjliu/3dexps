@@ -3,21 +3,19 @@ require 'nn'
 require 'optim'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
-model_path = '/data/models/full_dataset_voxels/';
-
 opt = {
   leakyslope = 0.2,
-  --glr = 0.0025,
-  glr = 0.00025,
-  dlr = 0.00003,
-  --dlr = 1e-5,
+  glr = 0.0025,
+  --glr = 0.0005,
+  dlr = 0.00001,
   beta1 = 0.5,
   batchSize = 60,
   nout = 64,
   nz = 200,
   niter = 25,
   gpu = 1,
-  name = 'shapenet101'
+  name = 'shapenet101',
+  checkpointf = 'checkpoints_table'
 }
 
 if opt.gpu > 0 then
@@ -40,11 +38,15 @@ fake_label = 0
 local function weights_init(m)
   local name = torch.type(m)
   if name:find('Convolution') then
-    m.weight:normal(0.0, 0.02)
-    --m:noBias()
+    --m.weight:normal(0.0, 0.02)
+    m.weight:normal(0.0, 0.4)
+    print(m)
+    if m.noBias then
+      m:noBias()
+    end
   elseif name:find('BatchNormalization') then
-    if m.weight then m.weight:normal(1.0, 0.02) end
-    if m.bias then m.bias:fill(0) end
+    --if m.weight then m.weight:normal(1.0, 0.02) end
+    --if m.bias then m.bias:fill(0) end
   end
 end
 
@@ -93,7 +95,7 @@ netD:add(nn.LeakyReLU(opt.leakyslope, true))
 netD:add(nn.VolumetricConvolution(512,1,4,4,4))
 netD:add(nn.Sigmoid())
 netD:add(nn.View(1):setNumInputDims(4))
-netD:apply(weights_init)
+--netD:apply(weights_init)
 
 optimStateG = {
   learningRate = opt.glr,
@@ -139,6 +141,7 @@ local fDx = function(x)
   local real, rclasslabels = data:getBatch(opt.batchSize)
   input:copy(real)
   label:fill(real_label)
+  --print(input[{1,1,{17,48},{17,48},{17,48}}])
   local rout = netD:forward(input)
   local errD_real = criterion:forward(rout, label)
   local df_do = criterion:backward(rout, label)
@@ -151,7 +154,7 @@ local fDx = function(x)
   end
 
   print('getting fake batch')
-  noise:uniform(-1, 1)
+  noise:uniform(0, 1)
   local fake = netG:forward(noise)
   input:copy(fake)
   label:fill(fake_label)
@@ -169,6 +172,7 @@ local fDx = function(x)
   local accuracy = (numCorrect/(2*opt.batchSize))
   print(('disc accuracy: %.4f'):format(accuracy))
   if accuracy > 0.8 then
+    print('ZEROED')
     gradParametersD:zero()
   end
 
@@ -213,11 +217,15 @@ for epoch = 1, opt.niter do
     -- logging
     print(('Epoch: [%d][%8d / %8d]\t Err_G: %.4f Err_D: %.4f'):format(epoch, (i-1)/opt.batchSize, math.floor(data:size()/opt.batchSize),errG, errD))
   end
-  paths.mkdir('checkpoints')
+  if paths.dir(opt.checkpointf) == nil then
+    paths.mkdir(opt.checkpointf)
+  end
   parametersD, gradParametersD = nil,nil
   parametersG, gradParametersG = nil,nil
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG:clearState())
-  torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+  genCheckFile = opt.name .. '_' .. epoch .. '_net_G.t7'
+  disCheckFile = opt.name .. '_' .. epoch .. '_net_D.t7'
+  torch.save(paths.concat(opt.checkpointf, genCheckFile), netG:clearState())
+  torch.save(paths.concat(opt.checkpointf, disCheckFile), netD:clearState())
   
   parametersD, gradParametersD = netD:getParameters()
   parametersG, gradParametersG = netG:getParameters()
