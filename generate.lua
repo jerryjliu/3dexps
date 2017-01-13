@@ -10,7 +10,7 @@ cmd:option('-bs', 100, 'batch size')
 cmd:option('-ss', 100, 'number of generated shapes, only used in `-sample` mode')
 cmd:option('-ck', 25, 'Checkpoint to start from (default is 25)')
 
-checkpoint_path = './checkpoints_table'
+checkpoint_path = './checkpoints_chair5'
 
 opt = cmd:parse(arg or {})
 if opt.gpu > 0 then
@@ -23,6 +23,12 @@ end
 print('Loading network..')
 gen_path = paths.concat(checkpoint_path, 'shapenet101_' .. opt.ck .. '_net_G.t7')
 netG = torch.load(gen_path)
+
+if opt.gpu == 0 then
+  netG = netG:double()
+end
+
+print(netG)
 for i,module in ipairs(netG:listModules()) do
   if i == 2 or i == 3 then
     paramsG = module:getParameters()
@@ -37,7 +43,7 @@ netG:evaluate() -- batch normalization behaves differently during evaluation
 print('Setting inputs..')
 inputs = torch.rand(opt.ss, nz, 1, 1, 1)
 input = torch.Tensor(opt.bs, nz, 1, 1, 1)
-results = torch.Tensor(opt.ss, 1, 64, 64, 64):double()
+results = torch.zeros(opt.ss, 1, 64, 64, 64):double()
 if opt.gpu > 0 then
   netG = netG:cuda()
   netG = cudnn.convert(netG, cudnn)

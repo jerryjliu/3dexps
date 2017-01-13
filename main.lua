@@ -1,21 +1,32 @@
 require 'torch'
 require 'nn'
 require 'optim'
+require 'paths'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
 opt = {
   leakyslope = 0.2,
   glr = 0.0025,
-  --glr = 0.0005,
   dlr = 0.00001,
+  --glr = 0.0025,
+  --dlr = 0.00001,
+  --glr = 0.00025,  these weights work when initializing with pretrained weights
+  --dlr = 0.0001,  these weights work when initializing with pretrained weights
+  --glr = 0.0025 * 0.6,
+  --dlr = 0.00001 * 0.6,
+  --glr = 0.0001,
+  --dlr = 0.00007,
   beta1 = 0.5,
-  batchSize = 60,
+  batchSize = 90,
   nout = 64,
   nz = 200,
   niter = 25,
   gpu = 1,
   name = 'shapenet101',
-  checkpointf = 'checkpoints_table'
+  --checkpointf = 'checkpoints_table_cheat2'
+  --checkpointf = 'checkpoints_chair_cheat'
+  checkpointf = 'checkpoints_chair5',
+  checkpointn = 4
 }
 
 if opt.gpu > 0 then
@@ -39,13 +50,19 @@ local function weights_init(m)
   local name = torch.type(m)
   if name:find('Convolution') then
     --m.weight:normal(0.0, 0.02)
-    m.weight:normal(0.0, 0.4)
+    --m.weight:normal(0.0, 0.4)
+    
+    fan_in = m.kW * m.kT * m.kH * m.nInputPlane
+    fan_out = m.kW * m.kT * m.kH * m.nOutputPlane
+    std = math.sqrt(4 / (fan_in + fan_out))
+    m.weight:normal(0.0, std)
     print(m)
-    if m.noBias then
-      m:noBias()
+    print(std)
+    if m.bias then 
+      m.bias:fill(0) 
     end
   elseif name:find('BatchNormalization') then
-    --if m.weight then m.weight:normal(1.0, 0.02) end
+    --if m.weight then m.weight:fill(0) end
     --if m.bias then m.bias:fill(0) end
   end
 end
@@ -95,7 +112,12 @@ netD:add(nn.LeakyReLU(opt.leakyslope, true))
 netD:add(nn.VolumetricConvolution(512,1,4,4,4))
 netD:add(nn.Sigmoid())
 netD:add(nn.View(1):setNumInputDims(4))
---netD:apply(weights_init)
+netD:apply(weights_init)
+
+if opt.checkpointn > 0 then
+  netG = torch.load(paths.concat(opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
+  netD = torch.load(paths.concat(opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
+end
 
 optimStateG = {
   learningRate = opt.glr,
@@ -103,7 +125,7 @@ optimStateG = {
 }
 optimStateD = {
   learningRate = opt.dlr,
-  beta1 = opt.beta1
+  beta1 = opt.beta1,
 }
 
 -------------------------------------------------
@@ -141,14 +163,19 @@ local fDx = function(x)
   local real, rclasslabels = data:getBatch(opt.batchSize)
   input:copy(real)
   label:fill(real_label)
-  --print(input[{1,1,{17,48},{17,48},{17,48}}])
   local rout = netD:forward(input)
   local errD_real = criterion:forward(rout, label)
   local df_do = criterion:backward(rout, label)
   netD:backward(input, df_do)
 
+  --local temptensor = torch.Tensor(2,1,opt.nout,opt.nout,opt.nout)
+  --temptensor:copy(input[{{1,2},{},{},{},{}}])
+  --local temptensor2 = torch.Tensor(2,opt.nz,1,1,1)
+  --temptensor2:copy(noise[{{1,2},{},{},{},{}}])
+  --mat.save('hello_' .. rclasslabels[1] .. '_' .. rclasslabels[2] .. '.mat', {['inputs'] = temptensor2, ['voxels'] = temptensor}) 
+
   for i = 1,rout:size(1) do
-    if rout[{i,1}] > 0.5 then
+    if rout[{i,1}] >= 0.5 then
       numCorrect = numCorrect + 1
     end
   end
@@ -169,13 +196,16 @@ local fDx = function(x)
     end
   end
 
+
   local accuracy = (numCorrect/(2*opt.batchSize))
   print(('disc accuracy: %.4f'):format(accuracy))
-  if accuracy > 0.8 then
-    print('ZEROED')
-    gradParametersD:zero()
-  end
+  --if accuracy > 0.8 then
+    --print('ZEROED')
+    --gradParametersD:zero()
+  --end
 
+  print(rout:size())
+  print(fout:size())
   print(errD_real)
   print(errD_fake)
 
@@ -205,7 +235,9 @@ local fGx = function(x)
 end
 
 
-for epoch = 1, opt.niter do
+begin_epoch = opt.checkpointn + 1
+
+for epoch = begin_epoch, opt.niter do
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator

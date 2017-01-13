@@ -2,7 +2,7 @@ require 'paths'
 threads = require 'threads'
 threads.Threads.serialization('threads.sharedserialize')
 local matio = require 'matio'
-data_path = '/data/models/full_dataset_voxels_64_table/'
+data_path = '/data/models/full_dataset_voxels_64_chair/'
 
 data = {}
 data.__index = data
@@ -44,6 +44,7 @@ function data.new(opt)
         cur_dict = {}
         cat_path = paths.concat(data_path, cat)
         cat_models = paths.dir(cat_path)
+        table.sort(cat_models)
         for j, v2 in ipairs(cat_models) do
           if v2 ~= '.' and v2 ~= '..' then
             cat_model = cat_models[j]
@@ -52,6 +53,8 @@ function data.new(opt)
             off_tensor = matio.load(cat_model_path, 'off_volume')
             all_models[{curindex}] = off_tensor
             cur_dict[#cur_dict + 1] = curindex
+            print(cat_model)
+            print(#cur_dict)
             curindex = curindex + 1
           end
         end
@@ -102,20 +105,22 @@ function data:getBatch(quantity)
   local label = torch.Tensor(quantity)
   visited = {}
   i = 1
-  off_tindices = torch.LongTensor(quantity)
+  off_tindices = torch.LongTensor(quantity):zero()
   while i <= quantity do
     local catindex = torch.random(1, #self.catarr)
     local cat = self.catarr[catindex]
     local offindex = torch.random(1, #self.catdict[cat])
-    if type(visited[cat .. offindex]) ~= nil then
+    if visited[cat .. offindex] == nil then
       visited[cat .. offindex] = 1
       off_tindex = self.catdict[cat][offindex]
       off_tindices[{i}] = off_tindex
-      label[i] = catindex
+      --label[i] = catindex
+      label[i] = offindex
       i = i + 1
     end
   end
-  print(off_tindices)
+  --off_tindices = torch.sort(off_tindices)
+  --print(off_tindices)
   local data = self.all_models:index(1,off_tindices)
   data:cuda()
 
