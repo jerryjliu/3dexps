@@ -6,37 +6,16 @@ assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() m
 
 opt = {
   leakyslope = 0.2,
-  --glr = 0.002,
-  --dlr = 0.00003,
   glr = 0.001,
   dlr = 0.00008,
-  --glr = 0.00125,
-  --dlr = 0.000005,
-  --glr = 0.0021, -- scaling by 0.7 from 100
-  --dlr = 8.3666e-6,
-  --glr = 0.0025,
-  --dlr = 0.00001,
-  --glr = 0.00025,  these weights work when initializing with pretrained weights
-  --dlr = 0.0001,  these weights work when initializing with pretrained weights
-  --glr = 0.0025 * 0.6,
-  --dlr = 0.00001 * 0.6,
-  --glr = 0.0001,
-  --dlr = 0.00007,
   beta1 = 0.5,
-  --batchSize = 75,
   batchSize = 40,
-  --nout = 64,
-  --nout = 32,
   nz = 200,
+  nc = 7,
   niter = 25,
   gpu = 2,
   gpu2 = 0,
   name = 'shapenet101',
-  --checkpointf = 'checkpoints_table_cheat2'
-  --checkpointf = 'checkpoints_chair_cheat'
-  --checkpointf = '/data/jjliu/checkpoints/checkpoints_seven2',
-  --checkpointf = '/data/jjliu/checkpoints/checkpoints_chair80_parallel',
-  --checkpointf = '/data/jjliu/checkpoints/checkpoints_chair4',
   cache_dir = '/data/jjliu/cache/',
   data_dir = '/data/jjliu/models/',
   data_name = 'full_dataset_voxels_32_chair',
@@ -69,9 +48,6 @@ local data = DataLoader.new(opt)
 print('data size: ' .. data:size())
 ----------------------------
 
-real_label = 1
-fake_label = 0
-
 local function weights_init(m)
   local name = torch.type(m)
   if name:find('Convolution') then
@@ -93,11 +69,8 @@ local function weights_init(m)
   end
 end
 
-if opt.is32 == 0 then
-  net = paths.dofile('net64.lua')
-else
-  net = paths.dofile('net32.lua')
-end
+netBuilder = require 'netbuilder'
+net = netBuilder.buildnet(opt)
 -- Generator
 local netG = net.netG
 netG:apply(weights_init)
@@ -133,13 +106,17 @@ optimStateD = {
 -- put all cudnn-enabled variables here --
 -- ex: input, noise, label, errG, errD, (epoch_tm, tm, data_tm - purely for timing purposes)
 -- criterion
-local criterion = nn.BCECriterion()
+--local criterion = nn.BCECriterion()
+--local ceCriterion = nn.CrossEntropyCriterion()
+local nllCriterion = nn.ClassNLLCriterion()
+local bceCriterion = nn.BCECriterion()
 -- input to discriminator
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 -- input to generator
 local noise = torch.Tensor(opt.batchSize, opt.nz, 1, 1, 1)
 -- label tensor (used in training)
 local label = torch.Tensor(opt.batchSize)
+local fake_label = opt.nc + 1
 
 local errG, errD
 -------------------------------------------------
@@ -151,10 +128,54 @@ if opt.gpu > 0 then
   netG = cudnn.convert(netG, cudnn)
   netD = netD:cuda()
   netD = cudnn.convert(netD, cudnn)
-  criterion = criterion:cuda()
+  --criterion = criterion:cuda()
+  --ceCriterion = ceCriterion:cuda()
+  nllCriterion = nllCriterion:cuda()
+  bceCriterion = bceCriterion:cuda()
 end
 local parametersD, gradParametersD = netD:getParameters()
 local parametersG, gradParametersG = netG:getParameters()
+
+function compute_generator_loss(output_logits)
+  local binTensor = torch.Tensor(output_logits:size(1))
+  local binLabel = torch.Tensor(output_logits:size(1))
+  softMax = nn.SoftMax()
+  if opt.gpu > 0 then
+    softMax = softMax:cuda()
+  end
+  output_logits = softMax:forward(output_logits)
+  print(output_logits[1])
+  for i = 1, output_logits:size(1) do
+    fake_prob = output_logits[{i,output_logits:size(2)}]
+    real_prob = 1 - fake_prob
+    --print(real_prob)
+    --print(torch.sum(output_logits[{i,{1,output_logits:size(2)-1}}]))
+    assert(math.abs(torch.sum(output_logits[{i,{1,output_logits:size(2)-1}}]) - real_prob) <= 0.0001)
+    binTensor[{i}] = real_prob
+  end
+  binLabel:fill(1)
+  local errG = bceCriterion:forward(binTensor, binLabel)
+  return errG
+end
+
+
+function compute_accuracy(output_logits, is_real)
+  softMax = nn.SoftMax()
+  if opt.gpu > 0 then
+    softMax = softMax:cuda()
+  end
+  output_logits = softMax:forward(output_logits)
+  numCorrect = 0
+  for i = 1, output_logits:size(1) do
+    fake_prob = output_logits[{i,output_logits:size(2)}]
+    if fake_prob <= 0.5 and is_real then
+      numCorrect = numCorrect + 1
+    elseif fake_prob > 0.5 and not is_real then
+      numCorrect = numCorrect + 1
+    end
+  end
+  return (numCorrect / output_logits:size(1))
+end
 
 -- evaluate f(X), df/dX, discriminator
 local fDx = function(x)
@@ -165,17 +186,19 @@ local fDx = function(x)
   local numCorrect = 0
   local real, rclasslabels = data:getBatch(opt.batchSize)
   input:copy(real)
-  label:fill(real_label)
+  --label:fill(real_label)
+  label:copy(rclasslabels)
   local rout = netD:forward(input)
-  local errD_real = criterion:forward(rout, label)
-  local df_do = criterion:backward(rout, label)
+  local errD_real = nllCriterion:forward(rout, label)
+  local df_do = nllCriterion:backward(rout, label)
   netD:backward(input, df_do)
 
-  for i = 1,rout:size(1) do
-    if rout[{i,1}] >= 0.5 then
-      numCorrect = numCorrect + 1
-    end
-  end
+  real_accuracy = compute_accuracy(netD:get(11).output, true)
+  --for i = 1,rout:size(1) do
+    --if rout[{i,1}] >= 0.5 then
+      --numCorrect = numCorrect + 1
+    --end
+  --end
 
   print('getting fake batch')
   noise:uniform(0, 1)
@@ -183,17 +206,20 @@ local fDx = function(x)
   input:copy(fake)
   label:fill(fake_label)
   local fout = netD:forward(input)
-  local errD_fake = criterion:forward(fout, label)
-  local df_do = criterion:backward(fout, label)
+  local errD_fake = nllCriterion:forward(fout, label)
+  local df_do = nllCriterion:backward(fout, label)
   netD:backward(input, df_do)
 
-  for i = 1,fout:size(1) do
-    if fout[{i,1}] < 0.5 then
-      numCorrect = numCorrect + 1
-    end
-  end
+  fake_accuracy = compute_accuracy(netD:get(11).output, false)
 
-  local accuracy = (numCorrect/(2*opt.batchSize))
+  --for i = 1,fout:size(1) do
+    --if fout[{i,1}] < 0.5 then
+      --numCorrect = numCorrect + 1
+    --end
+  --end
+
+  local accuracy = (real_accuracy + fake_accuracy) / 2
+  --local accuracy = (numCorrect/(2*opt.batchSize))
   print(('disc accuracy: %.4f'):format(accuracy))
   if accuracy > 0.8 then
     print('ZEROED')
@@ -211,49 +237,26 @@ end
 
 -- evaluate f(X), df/dX, generator
 local fGx = function(x)
-  --netG:zeroGradParameters()
-  --label:fill(real_label)
-
-  --print('filled real label')
-  --local output = netD.output
-  --print('forwarding output')
-  --errG = errG + criterion:forward(output, label)
-  --print('errG: ' .. errG)
-  --print('..forwarded')
-  --local df_do = criterion:backward(output, label)
-  --local df_dg = netD:updateGradInput(input, df_do)
-  --print('updated discriminator gradient input')
-
-  --netG:backward(noise, df_dg)
-  --print('accumulated G')
-
-  ----print(gradParametersG[{{1,10}}])
-
-  --return errG, gradParametersG
   netG:zeroGradParameters()
   label:fill(fake_label)
-
-  templabel = torch.Tensor(opt.batchSize)
-  if opt.gpu > 0 then
-    templabel = templabel:cuda()
-  end
-  templabel:fill(real_label)
-
   print('filled real label')
   local output = netD.output
+  local tempoutput = netD:get(11).output
+  errG = compute_generator_loss(tempoutput)
+
   print('forwarding output')
-  errG = errG + criterion:forward(output, templabel)
-  criterion:forward(output, label)
+  nllCriterion:forward(output, label)
+  --errG = errG + nllCriterion:forward(output, label)
   print('errG: ' .. errG)
   print('..forwarded')
-  local df_do = criterion:backward(output, label)
+  local df_do = nllCriterion:backward(output, label)
   local df_dg = netD:updateGradInput(input, df_do)
   print('updated discriminator gradient input')
 
-  netG:backward(noise, df_dg)
+  netG:backward(noise, df_dg) -- negate gradient because in this case maximizing loss
   print('accumulated G')
 
-  --print(gradParametersG[{{1,10}}])
+  --print(-gradParametersG[{{1,10}}])
 
   return errG, -gradParametersG
 end
