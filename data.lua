@@ -24,8 +24,8 @@ function data.new(opt)
   self.data_path = self.opt.data_dir .. self.opt.data_name
   self.all_models_tensor_p = self.opt.cache_dir .. 'all_models_tensor_' .. self.opt.data_name .. '.t7'
   self.all_models_catarr_p = self.opt.cache_dir .. 'all_models_catarr_' .. self.opt.data_name .. '.t7'
-  self.all_models_catdict_p = self.opt.cache_dir .. 'all_models_catdict' .. self.opt.data_name .. '.t7'
-  self.all_models_catdictr_p = self.opt.cache_dir .. 'all_models_catdictr' .. self.opt.data_name .. '.t7'
+  self.all_models_catdict_p = self.opt.cache_dir .. 'all_models_catdict_' .. self.opt.data_name .. '.t7'
+  self.all_models_catdictr_p = self.opt.cache_dir .. 'all_models_catdictr_' .. self.opt.data_name .. '.t7'
 
   print(self.data_path)
 
