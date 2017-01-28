@@ -164,12 +164,14 @@ local fDx = function(x)
   print('getting real batch')
   local numCorrect = 0
   local real, rclasslabels = data:getBatch(opt.batchSize)
-  input:copy(real)
+
+  local actualBatchSize = real:size(1)
+  input[{{1,actualBatchSize}}]:copy(real)
   label:fill(real_label)
-  local rout = netD:forward(input)
-  local errD_real = criterion:forward(rout, label)
-  local df_do = criterion:backward(rout, label)
-  netD:backward(input, df_do)
+  local rout = netD:forward(input[{{1,actualBatchSize}}])
+  local errD_real = criterion:forward(rout, label[{{1,actualBatchSize}}])
+  local df_do = criterion:backward(rout, label[{{1,actualBatchSize}}])
+  netD:backward(input[{{1,actualBatchSize}}], df_do)
 
   for i = 1,rout:size(1) do
     if rout[{i,1}] >= 0.5 then
@@ -182,10 +184,10 @@ local fDx = function(x)
   local fake = netG:forward(noise)
   input:copy(fake)
   label:fill(fake_label)
-  local fout = netD:forward(input)
-  local errD_fake = criterion:forward(fout, label)
-  local df_do = criterion:backward(fout, label)
-  netD:backward(input, df_do)
+  local fout = netD:forward(input[{{1,actualBatchSize}}])
+  local errD_fake = criterion:forward(fout, label[{{1,actualBatchSize}}])
+  local df_do = criterion:backward(fout, label[{{1,actualBatchSize}}])
+  netD:backward(input[{{1,actualBatchSize}}], df_do)
 
   for i = 1,fout:size(1) do
     if fout[{i,1}] < 0.5 then
@@ -193,7 +195,7 @@ local fDx = function(x)
     end
   end
 
-  local accuracy = (numCorrect/(2*opt.batchSize))
+  local accuracy = (numCorrect/(2*actualBatchSize))
   print(('disc accuracy: %.4f'):format(accuracy))
   if accuracy > 0.8 then
     print('ZEROED')
@@ -205,67 +207,68 @@ local fDx = function(x)
   print(errD_real)
   print(errD_fake)
 
-  errD = errD + errD_real + errD_fake
+  errD = errD_real + errD_fake
   return errD, gradParametersD
 end
 
 -- evaluate f(X), df/dX, generator
 local fGx = function(x)
-  --netG:zeroGradParameters()
-  --label:fill(real_label)
-
-  --print('filled real label')
-  --local output = netD.output
-  --print('forwarding output')
-  --errG = errG + criterion:forward(output, label)
-  --print('errG: ' .. errG)
-  --print('..forwarded')
-  --local df_do = criterion:backward(output, label)
-  --local df_dg = netD:updateGradInput(input, df_do)
-  --print('updated discriminator gradient input')
-
-  --netG:backward(noise, df_dg)
-  --print('accumulated G')
-
-  ----print(gradParametersG[{{1,10}}])
-
-  --return errG, gradParametersG
   netG:zeroGradParameters()
-  label:fill(fake_label)
-
-  templabel = torch.Tensor(opt.batchSize)
-  if opt.gpu > 0 then
-    templabel = templabel:cuda()
-  end
-  templabel:fill(real_label)
+  label:fill(real_label)
 
   print('filled real label')
   local output = netD.output
+  local outputSize = output:size(1)
   print('forwarding output')
-  errG = errG + criterion:forward(output, templabel)
-  criterion:forward(output, label)
+  errG = criterion:forward(output, label[{{1,outputSize}}])
   print('errG: ' .. errG)
   print('..forwarded')
-  local df_do = criterion:backward(output, label)
-  local df_dg = netD:updateGradInput(input, df_do)
+  local df_do = criterion:backward(output, label[{{1,outputSize}}])
+  local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
   print('updated discriminator gradient input')
 
-  netG:backward(noise, df_dg)
+  netG:backward(noise[{{1,outputSize}}], df_dg)
   print('accumulated G')
 
   --print(gradParametersG[{{1,10}}])
 
-  return errG, -gradParametersG
+  return errG, gradParametersG
+  --netG:zeroGradParameters()
+  --label:fill(fake_label)
+
+  --templabel = torch.Tensor(opt.batchSize)
+  --if opt.gpu > 0 then
+    --templabel = templabel:cuda()
+  --end
+  --templabel:fill(real_label)
+
+  --print('filled real label')
+  --local output = netD.output
+  --local outputSize = output:size(1)
+  --print('forwarding output')
+  --errG = criterion:forward(output, templabel[{{1,outputSize}}])
+  --criterion:forward(output, label[{{1,outputSize}}])
+  --print('errG: ' .. errG)
+  --print('..forwarded')
+  --local df_do = criterion:backward(output, label[{{1,outputSize}}])
+  --local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
+  --print('updated discriminator gradient input')
+
+  --netG:backward(noise[{{1,outputSize}}], df_dg)
+  --print('accumulated G')
+
+  ----print(gradParametersG[{{1,10}}])
+
+  --return errG, -gradParametersG
 end
 
 begin_epoch = opt.checkpointn + 1
 
 for epoch = begin_epoch, opt.niter do
+  data:resetAndShuffle()
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
-    errG = 0
-    errD = 0
     print('Optimizing disc')
     optim.adam(fDx, parametersD, optimStateD)
     --netD:zeroGradParameters()
@@ -288,9 +291,10 @@ for epoch = begin_epoch, opt.niter do
   parametersG, gradParametersG = nil,nil
   genCheckFile = opt.name .. '_' .. epoch .. '_net_G.t7'
   disCheckFile = opt.name .. '_' .. epoch .. '_net_D.t7'
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
-  
+  if epoch % 20 == 0 then
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
+  end
   parametersD, gradParametersD = netD:getParameters()
   parametersG, gradParametersG = netG:getParameters()
   print(('End of epoch %d / %d'):format(epoch, opt.niter))

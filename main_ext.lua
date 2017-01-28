@@ -144,7 +144,7 @@ function compute_generator_loss(output_logits)
     softMax = softMax:cuda()
   end
   output_logits = softMax:forward(output_logits)
-  print(output_logits[1])
+  --print(output_logits[1])
   for i = 1, output_logits:size(1) do
     fake_prob = output_logits[{i,output_logits:size(2)}]
     real_prob = 1 - fake_prob
@@ -185,15 +185,16 @@ local fDx = function(x)
   print('getting real batch')
   local numCorrect = 0
   local real, rclasslabels = data:getBatch(opt.batchSize)
-  input:copy(real)
+  local actualBatchSize = real:size(1)
+  input[{{1,actualBatchSize}}]:copy(real)
   --label:fill(real_label)
-  label:copy(rclasslabels)
-  local rout = netD:forward(input)
-  local errD_real = nllCriterion:forward(rout, label)
-  local df_do = nllCriterion:backward(rout, label)
-  netD:backward(input, df_do)
+  label[{{1,actualBatchSize}}]:copy(rclasslabels)
+  local rout = netD:forward(input[{{1,actualBatchSize}}])
+  local errD_real = nllCriterion:forward(rout, label[{{1,actualBatchSize}}])
+  local df_do = nllCriterion:backward(rout, label[{{1,actualBatchSize}}])
+  netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  real_accuracy = compute_accuracy(netD:get(11).output, true)
+  real_accuracy = compute_accuracy(netD:get(14).output, true)
   --for i = 1,rout:size(1) do
     --if rout[{i,1}] >= 0.5 then
       --numCorrect = numCorrect + 1
@@ -205,12 +206,12 @@ local fDx = function(x)
   local fake = netG:forward(noise)
   input:copy(fake)
   label:fill(fake_label)
-  local fout = netD:forward(input)
-  local errD_fake = nllCriterion:forward(fout, label)
-  local df_do = nllCriterion:backward(fout, label)
-  netD:backward(input, df_do)
+  local fout = netD:forward(input[{{1,actualBatchSize}}])
+  local errD_fake = nllCriterion:forward(fout, label[{{1,actualBatchSize}}])
+  local df_do = nllCriterion:backward(fout, label[{{1,actualBatchSize}}])
+  netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  fake_accuracy = compute_accuracy(netD:get(11).output, false)
+  fake_accuracy = compute_accuracy(netD:get(14).output, false)
 
   --for i = 1,fout:size(1) do
     --if fout[{i,1}] < 0.5 then
@@ -241,19 +242,20 @@ local fGx = function(x)
   label:fill(fake_label)
   print('filled real label')
   local output = netD.output
-  local tempoutput = netD:get(11).output
+  local outputSize = output:size(1)
+  local tempoutput = netD:get(14).output
   errG = compute_generator_loss(tempoutput)
 
   print('forwarding output')
-  nllCriterion:forward(output, label)
+  nllCriterion:forward(output, label[{{1,outputSize}}])
   --errG = errG + nllCriterion:forward(output, label)
   print('errG: ' .. errG)
   print('..forwarded')
-  local df_do = nllCriterion:backward(output, label)
-  local df_dg = netD:updateGradInput(input, df_do)
+  local df_do = nllCriterion:backward(output, label[{{1,outputSize}}])
+  local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
   print('updated discriminator gradient input')
 
-  netG:backward(noise, df_dg) -- negate gradient because in this case maximizing loss
+  netG:backward(noise[{{1,outputSize}}], df_dg) -- negate gradient because in this case maximizing loss
   print('accumulated G')
 
   --print(-gradParametersG[{{1,10}}])
@@ -264,6 +266,7 @@ end
 begin_epoch = opt.checkpointn + 1
 
 for epoch = begin_epoch, opt.niter do
+  data:resetAndShuffle()
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
