@@ -43,8 +43,31 @@ netD:add(nn.VolumetricConvolution(512,1,4,4,4))
 netD:add(nn.Sigmoid())
 netD:add(nn.View(1):setNumInputDims(4))
 
+-- Projector (project output into latent space)
+local netP = nn.Sequential()
+-- 1x64x64x64 -> 64x32x32x32
+netP:add(nn.VolumetricConvolution(1,64,4,4,4,2,2,2,1,1,1))
+netP:add(nn.VolumetricBatchNormalization(64))
+netP:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 64x32x32x32 -> 128x16x16x16
+netP:add(nn.VolumetricConvolution(64,128,4,4,4,2,2,2,1,1,1))
+netP:add(nn.VolumetricBatchNormalization(128))
+netP:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 128x16x16x16 -> 256x8x8x8
+netP:add(nn.VolumetricConvolution(128,256,4,4,4,2,2,2,1,1,1))
+netP:add(nn.VolumetricBatchNormalization(256))
+netP:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 256x8x8x8 -> 512x4x4x4
+netP:add(nn.VolumetricConvolution(256,512,4,4,4,2,2,2,1,1,1))
+netP:add(nn.VolumetricBatchNormalization(512))
+netP:add(nn.LeakyReLU(opt.leakyslope, true))
+-- 512x4x4x4 -> 200x1x1x1
+netP:add(nn.VolumetricConvolution(512,200,4,4,4))
+netP:add(nn.Sigmoid())
+
 net64 = {}
 net64.netG = netG
 net64.netD = netD
+net64.netP = netP
 
 return net64

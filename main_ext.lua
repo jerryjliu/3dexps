@@ -177,6 +177,13 @@ function compute_accuracy(output_logits, is_real)
   return (numCorrect / output_logits:size(1))
 end
 
+function nn.Module:getSerialModel()
+  if opt.gpu2 > 0 then
+    return self:get(1)
+  end
+  return self
+end
+
 -- evaluate f(X), df/dX, discriminator
 local fDx = function(x)
 
@@ -194,7 +201,7 @@ local fDx = function(x)
   local df_do = nllCriterion:backward(rout, label[{{1,actualBatchSize}}])
   netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  real_accuracy = compute_accuracy(netD:get(14).output, true)
+  real_accuracy = compute_accuracy(netD:getSerialModel():get(14).output, true)
   --for i = 1,rout:size(1) do
     --if rout[{i,1}] >= 0.5 then
       --numCorrect = numCorrect + 1
@@ -211,7 +218,7 @@ local fDx = function(x)
   local df_do = nllCriterion:backward(fout, label[{{1,actualBatchSize}}])
   netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  fake_accuracy = compute_accuracy(netD:get(14).output, false)
+  fake_accuracy = compute_accuracy(netD:getSerialModel():get(14).output, false)
 
   --for i = 1,fout:size(1) do
     --if fout[{i,1}] < 0.5 then
@@ -243,7 +250,7 @@ local fGx = function(x)
   print('filled real label')
   local output = netD.output
   local outputSize = output:size(1)
-  local tempoutput = netD:get(14).output
+  local tempoutput = netD:getSerialModel():get(14).output
   errG = compute_generator_loss(tempoutput)
 
   print('forwarding output')
