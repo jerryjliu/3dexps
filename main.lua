@@ -43,6 +43,7 @@ opt = {
   checkpointd = '/data/jjliu/checkpoints/',
   checkpointf = 'checkpoints_32chair40ld',
   checkpointn = 0,
+  nskip = 5,
   is32 = 1,
 }
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end 
@@ -291,7 +292,7 @@ for epoch = begin_epoch, opt.niter do
   parametersG, gradParametersG = nil,nil
   genCheckFile = opt.name .. '_' .. epoch .. '_net_G.t7'
   disCheckFile = opt.name .. '_' .. epoch .. '_net_D.t7'
-  if epoch % 20 == 0 then
+  if epoch % opt.nskip == 0 then
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
   end

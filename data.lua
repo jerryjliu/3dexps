@@ -185,7 +185,7 @@ function data:getBatch(quantity)
   --print(self.dindices[{{minindex,maxindex}}])
   --print(self.dindices[{{minindex,maxindex}}])
   for j = minindex, maxindex do 
-    --print(j)
+    --print(self.dindices[j])
     label[{j - minindex + 1}] = self.catdictr[self.dindices[j]]
   end
   if self.opt.gpu > 0 then
