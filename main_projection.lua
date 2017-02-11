@@ -79,6 +79,7 @@ opt.checkpointf = opt.gen_checkpointf .. '_p' .. opt.genEpoch
 print(opt.name .. '_' .. opt.genEpoch .. '_net_G.t7')
 local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt.name .. '_' .. opt.genEpoch .. '_net_G.t7'))
 --netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
+netG:training()
 --netG:evaluate() -- batch normalization behaves differently during evaluation
 
 -- Projection network
@@ -88,7 +89,6 @@ optimStateP = {
   learningRate = opt.dlr,
   beta1 = opt.beta1,
 }
-local parametersP, gradParametersP = netP:getParameters()
 local criterion = nn.BCECriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
@@ -103,6 +103,7 @@ if opt.gpu > 0 then
   netG = cudnn.convert(netG, cudnn)
 end
 
+local parametersP, gradParametersP = netP:getParameters()
 -- update step Adam optim
 local fPx = function(x)
   netP:zeroGradParameters()
@@ -135,8 +136,8 @@ for epoch = begin_epoch, opt.niter do
     paths.mkdir(opt.checkpointd .. opt.checkpointf)
   end
   parametersP, gradParametersP = nil,nil
-  projCheckFile = opt.name .. '_' .. genEpoch .. '_' .. epoch .. '_net_P.t7'
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netP:clearState())
+  projCheckFile = opt.name .. '_' .. opt.genEpoch .. '_' .. epoch .. '_net_P.t7'
+  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, projCheckFile), netP:clearState())
   parametersP, gradParametersP = netP:getParameters()
   print(('End of epoch %d / %d'):format(epoch, opt.niter))
 end
