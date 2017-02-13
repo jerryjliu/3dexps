@@ -10,6 +10,8 @@ cmd:option('-bs', 100, 'batch size')
 cmd:option('-ss', 100, 'number of generated shapes, only used in `-sample` mode')
 cmd:option('-ck', 25, 'Checkpoint to start from (default is 25)')
 cmd:option('-ckp','checkpoints_32table80', 'the name of the checkpoint folder')
+cmd:option('-nc', 0, 'the number of categories (default is 0 for non conditional model)')
+cmd:option('-cat', 0, 'the category to specify (not necessary if nc = 0)')
 
 opt = cmd:parse(arg or {})
 if opt.gpu > 0 then
@@ -47,8 +49,8 @@ netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() e
 netG:evaluate() -- batch normalization behaves differently during evaluation
 
 print('Setting inputs..')
-inputs = torch.rand(opt.ss, nz, 1, 1, 1)
-input = torch.Tensor(opt.bs, nz, 1, 1, 1)
+inputs = torch.rand(opt.ss, nz + opt.nc, 1, 1, 1)
+input = torch.Tensor(opt.bs, nz + opt.nc, 1, 1, 1)
 if opt.gpu > 0 then
   netG = netG:cuda()
   netG = cudnn.convert(netG, cudnn)
@@ -58,6 +60,13 @@ testinput = netG:forward(input)
 dim = testinput:size()[3]
 --results = torch.zeros(opt.ss, 1, 64, 64, 64):double()
 results = torch.zeros(opt.ss, 1, dim, dim, dim):double()
+
+if opt.nc > 0 then
+  for i = 1, opt.ss do
+    inputs[{i,{nz + 1, nz + opt.nc}}]:fill(0)
+    inputs[{i, nz + opt.cat}]:fill(1)
+  end
+end
 
 print('Forward prop')
 for i = 1, math.ceil(opt.ss / opt.bs) do

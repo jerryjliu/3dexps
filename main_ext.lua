@@ -13,6 +13,7 @@ opt = {
   nz = 200,
   nc = 7,
   niter = 25,
+  nskip = 1,
   gpu = 2,
   gpu2 = 0,
   name = 'shapenet101',
@@ -88,11 +89,6 @@ if opt.gpu2 > 0 then
   netD = tempnet
 end
 
-if opt.checkpointn > 0 then
-  netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
-  netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
-end
-
 optimStateG = {
   learningRate = opt.glr,
   beta1 = opt.beta1,
@@ -101,6 +97,13 @@ optimStateD = {
   learningRate = opt.dlr,
   beta1 = opt.beta1,
 }
+
+if opt.checkpointn > 0 then
+  netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
+  netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
+  optimStateG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateG.t7'))
+  optimStateD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateD.t7'))
+end
 
 -------------------------------------------------
 -- put all cudnn-enabled variables here --
@@ -113,9 +116,10 @@ local bceCriterion = nn.BCECriterion()
 -- input to discriminator
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 -- input to generator
-local noise = torch.Tensor(opt.batchSize, opt.nz, 1, 1, 1)
+local noise = torch.Tensor(opt.batchSize, opt.nz + opt.nc, 1, 1, 1)
 -- label tensor (used in training)
 local label = torch.Tensor(opt.batchSize)
+local classlabel = torch.Tensor(opt.batchSize)
 local fake_label = opt.nc + 1
 
 local errG, errD
@@ -196,12 +200,13 @@ local fDx = function(x)
   input[{{1,actualBatchSize}}]:copy(real)
   --label:fill(real_label)
   label[{{1,actualBatchSize}}]:copy(rclasslabels)
+  classlabel[{{1,actualBatchSize}}]:copy(rclasslabels)
   local rout = netD:forward(input[{{1,actualBatchSize}}])
   local errD_real = nllCriterion:forward(rout, label[{{1,actualBatchSize}}])
   local df_do = nllCriterion:backward(rout, label[{{1,actualBatchSize}}])
   netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  real_accuracy = compute_accuracy(netD:getSerialModel():get(14).output, true)
+  real_accuracy = compute_accuracy(netD:getSerialModel():get(18).output, true)
   --for i = 1,rout:size(1) do
     --if rout[{i,1}] >= 0.5 then
       --numCorrect = numCorrect + 1
@@ -210,6 +215,11 @@ local fDx = function(x)
 
   print('getting fake batch')
   noise:uniform(0, 1)
+  for i = 1,actualBatchSize do
+    noise[{i,{opt.nz + 1, opt.nz + opt.nc}}]:fill(0)
+    noise[{i, opt.nz + rclasslabels[i]}]:fill(1)
+  end
+  --print(noise[{{1,10},{opt.nz + 1, opt.nz + opt.nc}}])
   local fake = netG:forward(noise)
   input:copy(fake)
   label:fill(fake_label)
@@ -218,7 +228,7 @@ local fDx = function(x)
   local df_do = nllCriterion:backward(fout, label[{{1,actualBatchSize}}])
   netD:backward(input[{{1,actualBatchSize}}], df_do)
 
-  fake_accuracy = compute_accuracy(netD:getSerialModel():get(14).output, false)
+  fake_accuracy = compute_accuracy(netD:getSerialModel():get(18).output, false)
 
   --for i = 1,fout:size(1) do
     --if fout[{i,1}] < 0.5 then
@@ -246,28 +256,46 @@ end
 -- evaluate f(X), df/dX, generator
 local fGx = function(x)
   netG:zeroGradParameters()
-  label:fill(fake_label)
-  print('filled real label')
+  print('Filled class labels')
   local output = netD.output
   local outputSize = output:size(1)
-  local tempoutput = netD:getSerialModel():get(14).output
+  local tempoutput = netD:getSerialModel():get(18).output
   errG = compute_generator_loss(tempoutput)
 
   print('forwarding output')
-  nllCriterion:forward(output, label[{{1,outputSize}}])
-  --errG = errG + nllCriterion:forward(output, label)
+  --print(classlabel[{{1,10}}])
+  nllCriterion:forward(output, classlabel[{{1,outputSize}}])
   print('errG: ' .. errG)
   print('..forwarded')
-  local df_do = nllCriterion:backward(output, label[{{1,outputSize}}])
+  local df_do = nllCriterion:backward(output, classlabel[{{1,outputSize}}])
   local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
   print('updated discriminator gradient input')
 
-  netG:backward(noise[{{1,outputSize}}], df_dg) -- negate gradient because in this case maximizing loss
+  netG:backward(noise[{{1,outputSize}}], df_dg)
   print('accumulated G')
+  --netG:zeroGradParameters()
+  --label:fill(fake_label)
+  --print('filled real label')
+  --local output = netD.output
+  --local outputSize = output:size(1)
+  --local tempoutput = netD:getSerialModel():get(14).output
+  --errG = compute_generator_loss(tempoutput)
+
+  --print('forwarding output')
+  --nllCriterion:forward(output, label[{{1,outputSize}}])
+  ----errG = errG + nllCriterion:forward(output, label)
+  --print('errG: ' .. errG)
+  --print('..forwarded')
+  --local df_do = nllCriterion:backward(output, label[{{1,outputSize}}])
+  --local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
+  --print('updated discriminator gradient input')
+
+  --netG:backward(noise[{{1,outputSize}}], -df_dg) -- negate gradient because in this case maximizing loss
+  --print('accumulated G')
 
   --print(-gradParametersG[{{1,10}}])
 
-  return errG, -gradParametersG
+  return errG, gradParametersG
 end
 
 begin_epoch = opt.checkpointn + 1
@@ -277,6 +305,21 @@ for epoch = begin_epoch, opt.niter do
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
+    
+    -- experiment: adaptive learning rates:
+    --if errG ~= nil and errD ~= nil then 
+      --if errG > errD then 
+        ----optimStateG.learningRate = math.min(optimStateG.learningRate * 1.1, 0.03)
+        --optimStateD.learningRate = math.max(optimStateD.learningRate * 0.9, 0.000001)
+      --else 
+        ----optimStateG.learningRate = math.max(optimStateG.learningRate * 0.9, 0.0008)
+        --optimStateD.learningRate = math.min(optimStateD.learningRate * 1.1, 0.001)
+      --end
+    --end
+
+    print('glr: ' .. optimStateG.learningRate)
+    print('dlr: ' .. optimStateD.learningRate)
+
     errG = 0
     errD = 0
     print('Optimizing disc')
@@ -301,8 +344,14 @@ for epoch = begin_epoch, opt.niter do
   parametersG, gradParametersG = nil,nil
   genCheckFile = opt.name .. '_' .. epoch .. '_net_G.t7'
   disCheckFile = opt.name .. '_' .. epoch .. '_net_D.t7'
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
+  optimStateGFile = opt.name .. '_' .. epoch .. '_net_optimStateG.t7'
+  optimStateDFile = opt.name .. '_' .. epoch .. '_net_optimStateD.t7'
+  if epoch % opt.nskip == 0 then
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateGFile), optimStateG)
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateDFile), optimStateD)
+  end
   
   parametersD, gradParametersD = netD:getParameters()
   parametersG, gradParametersG = netG:getParameters()

@@ -86,18 +86,22 @@ function netbuilder.net64(opt)
   -- Generator
   local netG = nn.Sequential() 
   -- 200x1x1x1 -> 512x4x4x4
-  netG:add(nn.VolumetricFullConvolution(200,512,4,4,4))
+  netG:add(nn.VolumetricDropout(0.2))
+  netG:add(nn.VolumetricFullConvolution(200 + opt.nc,512,4,4,4))
   netG:add(nn.VolumetricBatchNormalization(512))
   netG:add(nn.ReLU())
   -- 512x4x4x4 -> 256x8x8x8
+  netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(512,256,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(256))
   netG:add(nn.ReLU())
   -- 256x8x8x8 -> 128x16x16x16
+  netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(256,128,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(128))
   netG:add(nn.ReLU())
   -- 128x16x16x16 -> 64x32x32x32
+  netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(128,64,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(64))
   netG:add(nn.ReLU())
@@ -112,18 +116,22 @@ function netbuilder.net64(opt)
   netD:add(nn.VolumetricBatchNormalization(64))
   netD:add(nn.LeakyReLU(opt.leakyslope, true))
   -- 64x32x32x32 -> 128x16x16x16
+  netD:add(nn.VolumetricDropout(0.5))
   netD:add(nn.VolumetricConvolution(64,128,4,4,4,2,2,2,1,1,1))
   netD:add(nn.VolumetricBatchNormalization(128))
   netD:add(nn.LeakyReLU(opt.leakyslope, true))
   -- 128x16x16x16 -> 256x8x8x8
+  netD:add(nn.VolumetricDropout(0.5))
   netD:add(nn.VolumetricConvolution(128,256,4,4,4,2,2,2,1,1,1))
   netD:add(nn.VolumetricBatchNormalization(256))
   netD:add(nn.LeakyReLU(opt.leakyslope, true))
   -- 256x8x8x8 -> 512x4x4x4
+  netD:add(nn.VolumetricDropout(0.5))
   netD:add(nn.VolumetricConvolution(256,512,4,4,4,2,2,2,1,1,1))
   netD:add(nn.VolumetricBatchNormalization(512))
   netD:add(nn.LeakyReLU(opt.leakyslope, true))
   -- 512x4x4x4 -> 1x1x1x1
+  netD:add(nn.VolumetricDropout(0.5))
   netD:add(nn.VolumetricConvolution(512,1+opt.nc,4,4,4))
   netD:add(nn.View(1 + opt.nc):setNumInputDims(4))
   if opt.nc > 0 then
