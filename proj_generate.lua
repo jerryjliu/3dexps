@@ -9,6 +9,7 @@ cmd:option('-input','test_chair1', 'the name of the input file')
 cmd:option('-ckp', 'checkpoints_64chair_ref', 'checkpoint folder of gen model')
 cmd:option('-ckgen', '888', 'checkpoint of the gen model')
 cmd:option('-ckproj', '40', 'checkpoint of the projection model')
+cmd:option('-ckext', '', 'extension to ckp to specify name of projection folder ( default is none )')
 
 opt = cmd:parse(arg or {})
 if opt.gpu > 0 then
@@ -21,6 +22,9 @@ end
 data_dir = '/data/jjliu/models/proj_inputs_voxel/'
 checkpoint_gen_path = '/data/jjliu/checkpoints/' .. opt.ckp
 checkpoint_proj_path = '/data/jjliu/checkpoints/' .. opt.ckp .. '_p' .. opt.ckgen
+if opt.ckext ~= '' then
+  checkpoint_proj_path = '/data/jjliu/checkpoints/' .. opt.ckp .. '_p' .. opt.ckgen .. '_' .. opt.ckext
+end
 print('Loading network..')
 gen_path = paths.concat(checkpoint_gen_path, 'shapenet101_' .. opt.ckgen .. '_net_G.t7')
 proj_path = paths.concat(checkpoint_proj_path, 'shapenet101_' .. opt.ckgen .. '_' .. opt.ckproj .. '_net_P.t7')

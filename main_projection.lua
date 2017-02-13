@@ -20,6 +20,7 @@ opt = {
   data_name = 'full_dataset_voxels_32_chair',
   checkpointd = '/data/jjliu/checkpoints/',
   gen_checkpointf='checkpoints_64chair100o',
+  out_ext = '',
   checkpointn = 0,
   is32 = 1,
 }
@@ -75,6 +76,9 @@ else
   net = paths.dofile('net32.lua')
 end
 opt.checkpointf = opt.gen_checkpointf .. '_p' .. opt.genEpoch
+if opt.out_ext ~= '' then
+  opt.checkpointf = opt.checkpointf .. '_' .. opt.out_ext
+end
 -- Generator (decoder) to use
 print(opt.name .. '_' .. opt.genEpoch .. '_net_G.t7')
 local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt.name .. '_' .. opt.genEpoch .. '_net_G.t7'))
