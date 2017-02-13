@@ -116,11 +116,6 @@ if opt.gpu2 > 0 then
   netD = tempnet
 end
 
-if opt.checkpointn > 0 then
-  netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
-  netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
-end
-
 optimStateG = {
   learningRate = opt.glr,
   beta1 = opt.beta1,
@@ -129,6 +124,14 @@ optimStateD = {
   learningRate = opt.dlr,
   beta1 = opt.beta1,
 }
+
+if opt.checkpointn > 0 then
+  netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
+  netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
+  optimStateG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateG.t7'))
+  optimStateD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateD.t7'))
+end
+
 
 -------------------------------------------------
 -- put all cudnn-enabled variables here --
@@ -292,9 +295,13 @@ for epoch = begin_epoch, opt.niter do
   parametersG, gradParametersG = nil,nil
   genCheckFile = opt.name .. '_' .. epoch .. '_net_G.t7'
   disCheckFile = opt.name .. '_' .. epoch .. '_net_D.t7'
+  optimStateGFile = opt.name .. '_' .. epoch .. '_net_optimStateG.t7'
+  optimStateDFile = opt.name .. '_' .. epoch .. '_net_optimStateD.t7'
   if epoch % opt.nskip == 0 then
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateGFile), optimStateG)
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateDFile), optimStateD)
   end
   parametersD, gradParametersD = netD:getParameters()
   parametersG, gradParametersG = netG:getParameters()
