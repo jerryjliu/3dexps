@@ -231,6 +231,8 @@ local fGx = function(x)
   local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
   print('updated discriminator gradient input')
 
+  print(outputSize)
+
   netG:backward(noise[{{1,outputSize}}], df_dg)
   print('accumulated G')
 
