@@ -37,7 +37,7 @@ end
 
 print(netG)
 for i,module in ipairs(netG:listModules()) do
-  if i == 2 or i == 3 then
+  if i == 2 then
     paramsG = module:getParameters()
     print(module)
     print(paramsG[{{1,100}}])
