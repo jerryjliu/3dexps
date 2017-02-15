@@ -27,13 +27,18 @@ print(checkpoint_path)
 
 print('Loading network..')
 gen_path = paths.concat(checkpoint_path, 'shapenet101_' .. opt.ck .. '_net_G.t7')
+disc_path = paths.concat(checkpoint_path, 'shapenet101_' .. opt.ck .. '_net_D.t7') -- for retrieving meta info
 netG = torch.load(gen_path)
+netD = torch.load(disc_path)
 -- only if originally saved as parallel model
 --netG = netG:get(1)
 
 if opt.gpu == 0 then
   netG = netG:double()
+  netD = netD:double()
 end
+
+print(netD)
 
 print(netG)
 for i,module in ipairs(netG:listModules()) do
