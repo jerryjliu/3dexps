@@ -1,7 +1,10 @@
+require 'vae_util'
+
 local KLDPenalty, parent = torch.class('nn.KLDPenalty', 'nn.Module')
 
 function KLDPenalty:updateOutput(input)
-    local mean, log_var = table.unpack(input)
+    --local mean, log_var = table.unpack(input)
+    mean, log_var = get_mean_logvar(input)
     self.output = input
 
     -- Appendix B from VAE paper: 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
@@ -18,7 +21,9 @@ end
 
 function KLDPenalty:updateGradInput(input, gradOutput)
     assert(#gradOutput == 2)
-    local mean, log_var = table.unpack(input)
+    --local mean, log_var = table.unpack(input)
+    mean, log_var = get_mean_logvar(input)
+
     self.gradInput = {}
     self.gradInput[1] = mean:clone() + gradOutput[1]
 

@@ -1,3 +1,7 @@
+local VAE = require 'VAE'
+require 'KLDPenalty'
+require 'Sampler'
+
 local netbuilder = {}
 function netbuilder.buildnet(opt)
   if opt.is32 == 1 then
@@ -83,6 +87,29 @@ function netbuilder.net32(opt)
 end
 
 function netbuilder.net64(opt)
+  -- Encoder (VAE) - (same structure as discriminator network)
+  local netE = nn.Sequential()
+  -- 1x64x64x64 -> 64x32x32x32
+  netE:add(nn.VolumetricConvolution(1,64,4,4,4,2,2,2,1,1,1))
+  netE:add(nn.VolumetricBatchNormalization(64))
+  netE:add(nn.LeakyReLU(opt.leakyslope, true))
+  -- 64x32x32x32 -> 128x16x16x16
+  netE:add(nn.VolumetricConvolution(64,128,4,4,4,2,2,2,1,1,1))
+  netE:add(nn.VolumetricBatchNormalization(128))
+  netE:add(nn.LeakyReLU(opt.leakyslope, true))
+  -- 128x16x16x16 -> 256x8x8x8
+  netE:add(nn.VolumetricConvolution(128,256,4,4,4,2,2,2,1,1,1))
+  netE:add(nn.VolumetricBatchNormalization(256))
+  netE:add(nn.LeakyReLU(opt.leakyslope, true))
+  -- 256x8x8x8 -> 512x4x4x4
+  netE:add(nn.VolumetricConvolution(256,512,4,4,4,2,2,2,1,1,1))
+  netE:add(nn.VolumetricBatchNormalization(512))
+  netE:add(nn.LeakyReLU(opt.leakyslope, true))
+  -- 512x4x4x4 -> 200x1x1x1
+  netE:add(nn.VolumetricConvolution(512,400,4,4,4))
+  netE:add(nn.KLDPenalty())
+  netE:add(nn.Sampler())
+
   -- Generator
   local netG = nn.Sequential() 
   -- 200x1x1x1 -> 512x4x4x4
