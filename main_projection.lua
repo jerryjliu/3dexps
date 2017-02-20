@@ -90,7 +90,7 @@ netG:training()
 local netP = net.netP
 netP:apply(weights_init)
 optimStateP = {
-  learningRate = opt.dlr,
+  learningRate = opt.plr,
   beta1 = opt.beta1,
 }
 local criterion = nn.BCECriterion()
