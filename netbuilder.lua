@@ -113,22 +113,22 @@ function netbuilder.net64(opt)
   -- Generator
   local netG = nn.Sequential() 
   -- 200x1x1x1 -> 512x4x4x4
-  netG:add(nn.VolumetricDropout(0.2))
+  --netG:add(nn.VolumetricDropout(0.2))
   netG:add(nn.VolumetricFullConvolution(200 + opt.nc,512,4,4,4))
   netG:add(nn.VolumetricBatchNormalization(512))
   netG:add(nn.ReLU())
   -- 512x4x4x4 -> 256x8x8x8
-  netG:add(nn.VolumetricDropout(0.5))
+  --netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(512,256,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(256))
   netG:add(nn.ReLU())
   -- 256x8x8x8 -> 128x16x16x16
-  netG:add(nn.VolumetricDropout(0.5))
+  --netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(256,128,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(128))
   netG:add(nn.ReLU())
   -- 128x16x16x16 -> 64x32x32x32
-  netG:add(nn.VolumetricDropout(0.5))
+  --netG:add(nn.VolumetricDropout(0.5))
   netG:add(nn.VolumetricFullConvolution(128,64,4,4,4,2,2,2,1,1,1))
   netG:add(nn.VolumetricBatchNormalization(64))
   netG:add(nn.ReLU())
@@ -170,6 +170,7 @@ function netbuilder.net64(opt)
   net64 = {}
   net64.netG = netG
   net64.netD = netD
+  net64.netE = netE
   return net64
 end
 

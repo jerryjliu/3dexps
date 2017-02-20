@@ -8,8 +8,8 @@ opt = {
   leakyslope = 0.2,
   --glr = 0.002,
   --dlr = 0.00003,
-  glr = 0.001,
-  dlr = 0.00008,
+  glr = 0.001, -- G=0.0025
+  dlr = 0.00008, -- D=0.00001
   --glr = 0.00125,
   --dlr = 0.000005,
   --glr = 0.0021, -- scaling by 0.7 from 100
@@ -24,7 +24,7 @@ opt = {
   --dlr = 0.00007,
   beta1 = 0.5,
   --batchSize = 75,
-  batchSize = 40,
+  batchSize = 40, --batchSize = 100
   --nout = 64,
   --nout = 32,
   nz = 200,

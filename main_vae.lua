@@ -6,8 +6,10 @@ assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() m
 
 opt = {
   leakyslope = 0.2,
+  elr = 0.00005,
   glr = 0.001,
   dlr = 0.00008,
+  alpha_recon = 1,
   beta1 = 0.5,
   batchSize = 40,
   nz = 200,
@@ -70,11 +72,22 @@ local function weights_init(m)
   end
 end
 
-if opt.is32 == 0 then
-  net = paths.dofile('net64.lua')
-else
-  net = paths.dofile('net32.lua')
+local KLD = nil
+local function find_KLD_loss(net)
+  if KLD ~= nil then
+    return KLD.loss
+  end
+  for i, module in ipairs(net:listModules()) do
+    local name = torch.type(module)
+    if name:find('KLDPenalty') then
+      KLD = module
+      return module.loss
+    end
+  end
 end
+
+netBuilder = require 'netbuilder'
+net = netBuilder.buildnet(opt)
 -- Generator
 local netG = net.netG
 netG:apply(weights_init)
@@ -142,6 +155,8 @@ local label = torch.Tensor(opt.batchSize)
 local errE, errG, errD
 -------------------------------------------------
 if opt.gpu > 0 then
+  real = real:cuda()
+  projnoise = projnoise:cuda()
   input = input:cuda()
   noise = noise:cuda()
   label = label:cuda()
@@ -163,15 +178,19 @@ local fEx = function(x)
 
   local realBatch, rclasslabels = data:getBatch(opt.batchSize)
   actualBatchSize = realBatch:size(1)
-  realBatch[{{1,actualBatchSize}}]:copy(real)
-  projnoise[{{1,actualBatchSize}}]:copy(netE:forward(realBatch[{{1,actualBatchSize}}]))
+  real[{{1,actualBatchSize}}]:copy(realBatch)
+  local tempproj = netE:forward(real[{{1,actualBatchSize}}])
+  projnoise[{{1,actualBatchSize}}]:copy(tempproj)
   local tempgen = netG:forward(projnoise[{{1,actualBatchSize}}])
-  errE = criterion:forward(tempgen)
-  local df_do = criterion:backward(tempgen, recLoss)
+  errE = criterion:forward(tempgen, real[{{1,actualBatchSize}}])
+  local df_do = criterion:backward(tempgen, real[{{1,actualBatchSize}}])
   -- TODO: fix the magnitude of the contribution of the reconstruction loss to netG
-  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], df_do)
+  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], opt.alpha_recon * df_do)
   -- TODO: fix relative magnitudes of rec loss / KL divergence for netE
-  netE:backward(realBatch[{{1,actualBatchSize}}], df_de)
+  netE:backward(real[{{1,actualBatchSize}}], df_de)
+
+  local kld_loss = find_KLD_loss(netE)
+  print('get KLD loss: ' .. kld_loss)
 
   return errE, gradParametersE 
 end
@@ -183,7 +202,7 @@ local fDx = function(x)
   print('getting real batch')
   local numCorrect = 0
 
-  input[{{1,actualBatchSize}}]:copy(real)
+  input[{{1,actualBatchSize}}]:copy(real[{{1,actualBatchSize}}])
   label:fill(real_label)
   local rout = netD:forward(input[{{1,actualBatchSize}}])
   local errD_real = criterion:forward(rout, label[{{1,actualBatchSize}}])
@@ -197,8 +216,9 @@ local fDx = function(x)
   end
 
   print('copying half of projnoise into noise, so samples from both p(z) and q(z | x)')
-  noise:uniform(0,1)
-  noise[{{1,actualBatchSize/2}}]:copy(projnoise[{{1,projBatchSize/2}}])
+  --noise:uniform(0,1)
+  noise:normal(0,1)
+  noise[{{1,actualBatchSize/2}}]:copy(projnoise[{{1,actualBatchSize/2}}])
   local fake = netG:forward(noise[{{1,actualBatchSize}}])
   input[{{1, actualBatchSize}}]:copy(fake)
   label:fill(fake_label)
@@ -222,7 +242,7 @@ local fDx = function(x)
   print(rout:size())
   print(fout:size())
   print(errD_real)
-  print(errD_fake_proj .. ' ' .. errD_fake_rand)
+  print(errD_fake)
 
   errD = errD_real + errD_fake
   return errD, gradParametersD
@@ -288,7 +308,7 @@ for epoch = begin_epoch, opt.niter do
   if epoch % opt.nskip == 0 then
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, genCheckFile), netG:clearState())
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netD:clearState())
-    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, disCheckFile), netE:clearState())
+    torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, encCheckFile), netE:clearState())
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateGFile), optimStateG)
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateDFile), optimStateD)
     torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateEFile), optimStateE)

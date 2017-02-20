@@ -1,11 +1,14 @@
 require 'nn'
 require 'torch'
 require 'xlua'
+require 'KLDPenalty'
+require 'Sampler'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
 cmd = torch.CmdLine()
 cmd:option('-gpu', 0, 'GPU id, starting from 1. Set it to 0 to run it in CPU mode. ')
 cmd:option('-sample', false, 'whether to sample input latent vectors from an i.i.d. uniform distribution, or to generate shapes with demo vectors')
+cmd:option('-normal', false, 'whether to sample from a uniform dist (false) or a normal (true)')
 cmd:option('-bs', 100, 'batch size')
 cmd:option('-ss', 100, 'number of generated shapes, only used in `-sample` mode')
 cmd:option('-ck', 25, 'Checkpoint to start from (default is 25)')
@@ -30,6 +33,7 @@ gen_path = paths.concat(checkpoint_path, 'shapenet101_' .. opt.ck .. '_net_G.t7'
 disc_path = paths.concat(checkpoint_path, 'shapenet101_' .. opt.ck .. '_net_D.t7') -- for retrieving meta info
 netG = torch.load(gen_path)
 netD = torch.load(disc_path)
+print(netD)
 -- only if originally saved as parallel model
 --netG = netG:get(1)
 
@@ -55,6 +59,9 @@ netG:evaluate() -- batch normalization behaves differently during evaluation
 
 print('Setting inputs..')
 inputs = torch.rand(opt.ss, nz + opt.nc, 1, 1, 1)
+if opt.normal then
+  inputs:normal(0,1)
+end
 input = torch.Tensor(opt.bs, nz + opt.nc, 1, 1, 1)
 if opt.gpu > 0 then
   netG = netG:cuda()
