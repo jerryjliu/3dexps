@@ -2,6 +2,7 @@ require 'torch'
 require 'nn'
 require 'optim'
 require 'paths'
+require 'evaluation/eval_utils'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
 opt = {
@@ -79,10 +80,17 @@ optimStateC = {
   learningRate = opt.clr,
   beta1 = opt.beta1,
 }
+
+if opt.checkpointn > 0 then
+  netC = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_C.t7'))
+  optimStateC = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateC.t7'))
+end
+
 local criterion = nn.CrossEntropyCriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
 local errC
+local valError = 0
 if opt.gpu > 0 then
   input = input:cuda()
   label = label:cuda()
@@ -101,27 +109,49 @@ local fCx = function(x)
   local output = netC:forward(input[{{1,actualBatchSize}}])
   errC = criterion:forward(output, labels)
   local df_do = criterion:backward(output, labels)
-  netC:backward(output, df_do)
+  netC:backward(input[{{1,actualBatchSize}}], df_do)
   return errC, gradParametersC
+end
+
+function measure_validation_error(data, opt)
+  valset_models, valset_labels = data:loadValidationSet(opt)
+  accuracy = 0
+  for i = 1, math.ceil(valset_models:size(1) / opt.batchSize) do
+    print(('processing %d/%d'):format(i, math.ceil(valset_models:size(1)/opt.batchSize)))
+    ind_low = (i-1)*opt.batchSize + 1
+    ind_high = math.min(valset_models:size(1), i * opt.batchSize)
+    input:zero()
+    input[{{1,ind_high-ind_low+1},{},{},{},{}}] = valset_models[{{ind_low,ind_high},{},{},{},{}}]
+    res = netC:forward(input):double()
+    accuracy = accuracy + (compute_accuracy(res, valset_labels[{{ind_low, ind_high}}]) * (ind_high - ind_low + 1)/(valset_models:size(1)))
+  end
+  print('ACCURACY: ' .. accuracy)
+  assert(math.abs(accuracy) <= 1)
+  return accuracy
 end
 
 begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
+  valError = 1 - measure_validation_error(data, opt)
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
     print('Optimizing proj network')
     optim.adam(fCx, parametersC, optimStateC)
     -- logging
-    print(('Epoch: [%d][%8d / %8d]\t Err_P: %.4f'):format(epoch, (i-1)/(opt.batchSize), math.floor(data:size()/(opt.batchSize)),errC))
+    print(('Validation Error: %.4f'):format(valError))
+    print(('Epoch: [%d][%8d / %8d]\t Err_C: %.4f'):format(epoch, (i-1)/(opt.batchSize), math.floor(data:size()/(opt.batchSize)),errC))
   end
   if paths.dir(opt.checkpointd .. opt.checkpointf) == nil then
     paths.mkdir(opt.checkpointd .. opt.checkpointf)
   end
   parametersC, gradParametersC = nil,nil
-  checkFile = opt.name .. '_' .. epoch .. '_net_C.t7'
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, checkFile), netC:clearState())
+  netCheckFile = opt.name .. '_' .. epoch .. '_net_C.t7'
+  optimStateCFile = opt.name .. '_' .. epoch .. '_net_optimStateC.t7'
+  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, netCheckFile), netC:clearState())
+  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateCFile), netC:clearState())
   parametersC, gradParametersC = netC:getParameters()
+
   print(('End of epoch %d / %d'):format(epoch, opt.niter))
 end

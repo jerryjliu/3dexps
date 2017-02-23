@@ -21,7 +21,7 @@ function data.new(opt)
   self.opt = opt
 
   -- initialize variables
-  self.data_path = self.opt.data_dir .. self.opt.data_name
+  self.data_path = paths.concat(self.opt.data_dir, self.opt.data_name)
   self.all_models_tensor_p = self.opt.cache_dir .. 'all_models_tensor_' .. self.opt.data_name .. '.t7'
   self.all_models_catarr_p = self.opt.cache_dir .. 'all_models_catarr_' .. self.opt.data_name .. '.t7'
   self.all_models_catdict_p = self.opt.cache_dir .. 'all_models_catdict_' .. self.opt.data_name .. '.t7'
@@ -122,6 +122,74 @@ function data.new(opt)
   self:resetAndShuffle()
   --print(self.catdict)
   return self
+end
+
+function data:getCatToIndex(cat)
+  if self.catarr_dict == nil then
+    self.catarr_dict = {}
+    for i = 1, #self.catarr do
+      self.catarr_dict[self.catarr[i]] = i
+    end
+  end
+  return self.catarr_dict[cat]
+end
+
+-- only defined if you have a validation split on dataset
+function data:loadValidationSet(opt)
+  self.val_models_p = self.opt.cache_dir .. 'valset_models_' .. self.opt.data_name .. '.t7'
+  self.val_labels_p = self.opt.cache_dir .. 'valset_labels_' .. self.opt.data_name .. '.t7'
+  self.val_data_path = paths.concat(self.opt.data_dir, 'val')
+  assert(paths.dirp(self.val_data_path))
+  cats = paths.dir(self.val_data_path)
+  self._val_size = 0
+  for i, v in ipairs(cats) do
+    if v ~= '.' and v ~= '..' then
+      cat = cats[i]
+      cat_path = paths.concat(self.val_data_path, cat)
+      cat_models = paths.dir(cat_path)
+      for j, v2 in ipairs(cat_models) do
+        if v2 ~= '.' and v2 ~= '..' then
+          self._val_size = self._val_size + 1
+        end
+      end
+    end
+  end
+
+  if paths.filep(self.val_models_p) then
+    self.valset_models = torch.load(self.val_models_p)
+    self.valset_labels = torch.load(self.val_labels_p)
+  else
+    valset_models = torch.ByteTensor(self._val_size, 1, self.opt.nout, self.opt.nout, self.opt.nout)
+    valset_labels = torch.Tensor(self._val_size)
+    local curindex = 1
+    for i, v in ipairs(cats) do
+      if v ~= '.' and v ~= '..' then
+        cat = cats[i]
+        print('CATEGORY: ' .. cat)
+        cat_path = paths.concat(self.val_data_path, cat)
+        cat_models = paths.dir(cat_path)
+        table.sort(cat_models)
+        catIndex = self:getCatToIndex(cat)
+        for j, v2 in ipairs(cat_models) do
+          if v2 ~= '.' and v2 ~= '..' then
+            cat_model = cat_models[j]
+            cat_model_path = paths.concat(cat_path, cat_model)
+            print(i .. ', ' .. j .. ' loading ' .. cat_model_path)
+            off_tensor = matio.load(cat_model_path, 'off_volume')
+            valset_models[{curindex}] = off_tensor
+            valset_labels[{curindex}] = catIndex
+            curindex = curindex + 1
+          end
+        end
+      end
+    end
+    self.valset_models = valset_models
+    self.valset_labels = valset_labels
+    torch.save(self.val_models_p, valset_models)
+    torch.save(self.val_labels_p, valset_labels)
+  end
+
+  return self.valset_models, self.valset_labels
 end
 
 -- run knuth shuffle of indices (from http://rosettacode.org/wiki/Knuth_shuffle#Lua)

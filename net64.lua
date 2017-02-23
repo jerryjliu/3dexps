@@ -82,7 +82,7 @@ netC:add(nn.VolumetricConvolution(1,32,4,4,4,2,2,2,1,1,1))
 netC:add(nn.VolumetricBatchNormalization(32))
 netC:add(nn.LeakyReLU(opt.leakyslope, true))
 -- 32x32x32x32 -> 32x15x15x15
-netC:add(nn.VolumetricConvolution(1,32,5,5,5,2,2,2,1,1,1))
+netC:add(nn.VolumetricConvolution(32,32,5,5,5,2,2,2,1,1,1))
 netC:add(nn.LeakyReLU(opt.leakyslope,true))
 netC:add(nn.VolumetricDropout(0.2))
 -- 32x15x15x15 -> 32x12x12x12
