@@ -35,12 +35,12 @@ netG = torch.load(gen_path)
 netD = torch.load(disc_path)
 print(netD)
 -- only if originally saved as parallel model
---netG = netG:get(1)
+netG = netG:get(1)
 
-if opt.gpu == 0 then
+--if opt.gpu == 0 then
   netG = netG:double()
-  netD = netD:double()
-end
+  --netD = netD:double()
+--end
 
 print(netD)
 

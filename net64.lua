@@ -1,3 +1,5 @@
+require 'voxlayers'
+
 -- Generator
 local netG = nn.Sequential() 
 -- 200x1x1x1 -> 512x4x4x4
@@ -99,10 +101,26 @@ netC:add(nn.Dropout(0.4))
 -- 128 -> 101
 netC:add(nn.Linear(128,opt.nc))
 
+-- Voxception
+local netC_Vox = nn.Sequential()
+netC_Vox:add(vl.Voxception(5,1,16,opt))
+netC_Vox:add(vl.VoxceptionDown(5,32,8,opt))
+netC_Vox:add(vl.Voxception(5,32,16,opt))
+netC_Vox:add(vl.VoxceptionDown(5,32,8,opt))
+netC_Vox:add(vl.Voxception(5,32,32,opt))
+netC_Vox:add(vl.VoxceptionDown(5,64,16,opt))
+netC_Vox:add(vl.Voxception(5,64,64,opt))
+netC_Vox:add(vl.VoxceptionDown(5,128,32,opt))
+netC_Vox:add(nn.View(8192))
+netC_Vox:add(nn.Linear(8192,128))
+netC_Vox:add(nn.LeakyReLU(opt.leakyslope, true))
+netC_Vox:add(nn.Linear(128,opt.nc))
+
 net64 = {}
 net64.netG = netG
 net64.netD = netD
 net64.netP = netP
 net64.netC = netC
+net64.netC_Vox = netC_Vox
 
 return net64
