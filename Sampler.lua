@@ -37,6 +37,7 @@ function Sampler:updateGradInput(input, gradOutput)
       self.gradInput[{{},{mid+1, self.gradInput:size(2)}}]:mul(0.5):exp():mul(0.5):cmul(self.eps)
       self.gradInput[{{},{mid+1, self.gradInput:size(2)}}]:cmul(gradOutput)
     end
+    --print(self.gradInput)
     --self.gradInput[1] = self.gradInput[1] or mean.new()
     --self.gradInput[1]:resizeAs(gradOutput):copy(gradOutput)
     

@@ -176,21 +176,29 @@ local fEx = function(x)
   netE:zeroGradParameters()
   netG:zeroGradParameters()
 
+
   local realBatch, rclasslabels = data:getBatch(opt.batchSize)
   actualBatchSize = realBatch:size(1)
   real[{{1,actualBatchSize}}]:copy(realBatch)
   local tempproj = netE:forward(real[{{1,actualBatchSize}}])
   projnoise[{{1,actualBatchSize}}]:copy(tempproj)
   local tempgen = netG:forward(projnoise[{{1,actualBatchSize}}])
+  --print(tempgen[{1,1,1,1,{1,10}}])
+  --print(real[{1,1,1,1,{1,10}}])
   errE = criterion:forward(tempgen, real[{{1,actualBatchSize}}])
   local df_do = criterion:backward(tempgen, real[{{1,actualBatchSize}}])
   -- TODO: fix the magnitude of the contribution of the reconstruction loss to netG
-  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], opt.alpha_recon * df_do)
+  --print(df_do[{1,1,1,1,{1,10}}])
+  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], df_do)
+  gradParametersG:mul(opt.alpha_recon)
+  --print(gradParametersG[{{1000,1020}}])
   -- TODO: fix relative magnitudes of rec loss / KL divergence for netE
   netE:backward(real[{{1,actualBatchSize}}], df_de)
 
   local kld_loss = find_KLD_loss(netE)
   print('get KLD loss: ' .. kld_loss)
+
+  --print(gradParametersE[{{1000,1020}}])
 
   return errE, gradParametersE 
 end
@@ -260,13 +268,13 @@ local fGx = function(x)
   print('errG: ' .. errG)
   print('..forwarded')
   local df_do = criterion:backward(output, label[{{1,outputSize}}])
-  local df_dg = netD:updateGradInput(input[{{1,outputSize}}], df_do)
+  local df_dg = netD:updateGradInput(input[{{1,outputSize}}], (1 - opt.alpha_recon) * df_do)
   print('updated discriminator gradient input')
-
   print(outputSize)
-
+  --print(df_dg[{1,1,1,1,{1,10}}])
   netG:backward(noise[{{1,outputSize}}], df_dg)
   print('accumulated G')
+  --print(gradParametersG[{{1000,1020}}])
   return errG, gradParametersG
 end
 

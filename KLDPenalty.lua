@@ -2,7 +2,7 @@ require 'vae_util'
 
 local KLDPenalty, parent = torch.class('nn.KLDPenalty', 'nn.Module')
 
-alpha_KLD = 1
+alpha_KLD = 5
 
 function KLDPenalty:updateOutput(input)
     --local mean, log_var = table.unpack(input)
