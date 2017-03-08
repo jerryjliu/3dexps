@@ -25,8 +25,10 @@ opt = {
   checkpointn = 0,
   is32 = 1,
   ctype = 'normal', -- cases: normal, voxception
-  nmomentum = 0.9,
+  nmomentum = 0,
   rotated=0,
+  orig_data_path='full_dataset_voxels_64_r8', -- only used if rotated > 0, provides data path of full rotated directory
+  contains_split=1,
 }
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end 
 
@@ -68,6 +70,8 @@ local function weights_init(m)
   elseif name:find('BatchNormalization') then
     --if m.weight then m.weight:fill(0) end
     --if m.bias then m.bias:fill(0) end
+  elseif name:find('Linear') then
+    m.weight:normal(0.0, 0.01)
   end
 end
 
@@ -83,6 +87,7 @@ if opt.ctype == 'voxception' then
   netC = net.netC_Vox
 end
 netC:apply(weights_init)
+print(netC)
 if opt.gpu2 > 0 then
   print(opt.gpu)
   print(opt.gpu2)
@@ -97,7 +102,7 @@ optimStateC = {
 }
 if opt.nmomentum > 0 then
   optimStateC.nesterov = true
-  optimStateC.momentum = 0.9
+  optimStateC.momentum = opt.nmomentum
   optimStateC.dampening = 0
 end
 
@@ -143,7 +148,7 @@ end
 
 function measure_validation_error(data, opt)
   netC:evaluate()
-  local valset_models, valset_labels = data:loadValidationSet(opt)
+  local valset_models, valset_labels = data:loadValidationSet()
   if valset_models == nil then
     return
   end
@@ -181,8 +186,11 @@ for epoch = begin_epoch, opt.niter do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
     print('Optimizing proj network')
-    --optim.adam(fCx, parametersC, optimStateC)
-    optim.sgd(fCx, parametersC, optimStateC)
+    if opt.nmomentum > 0 then
+      optim.sgd(fCx, parametersC, optimStateC)
+    else
+      optim.adam(fCx, parametersC, optimStateC)
+    end
     -- logging
     print(('Validation Error: %.4f'):format(valError))
     print(('Validation Class Error: %.4f'):format(valClassError))

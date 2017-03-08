@@ -22,7 +22,14 @@ function data.new(opt)
   self.opt = opt
 
   -- initialize variables
+  if self.opt.rotated > 0 then
+    assert(self.opt.orig_data_path ~= nil)
+    self.orig_data_path = paths.concat(self.opt.data_dir, self.opt.orig_data_path)
+  end
   self.data_path = paths.concat(self.opt.data_dir, self.opt.data_name)
+  if self.opt.contains_split then
+    self.data_path = paths.concat(self.data_path, 'data')
+  end
   self.all_models_tensor_p = self.opt.cache_dir .. 'all_models_tensor_' .. self.opt.data_name .. '.t7'
   self.all_models_catarr_p = self.opt.cache_dir .. 'all_models_catarr_' .. self.opt.data_name .. '.t7'
   self.all_models_catdict_p = self.opt.cache_dir .. 'all_models_catdict_' .. self.opt.data_name .. '.t7'
@@ -117,10 +124,11 @@ function data:getCatToIndex(cat)
 end
 
 -- only defined if you have a validation split on dataset
-function data:loadValidationSet(opt)
+function data:loadValidationSet()
+  assert(self.opt.contains_split)
   self.val_models_p = self.opt.cache_dir .. 'valset_models_' .. self.opt.data_name .. '.t7'
   self.val_labels_p = self.opt.cache_dir .. 'valset_labels_' .. self.opt.data_name .. '.t7'
-  self.val_data_path = paths.concat(self.opt.data_dir, 'val')
+  self.val_data_path = paths.concat(paths.concat(self.opt.data_dir, self.opt.data_name), 'val')
   if not paths.dirp(self.val_data_path) then
     return nil, nil
   end
@@ -221,13 +229,13 @@ function data:getBatchUniformSample(quantity)
   else
     -- load from rotated dataset
     data = torch.Tensor(quantity, self.opt.nout, self.opt.nout, self.opt.nout)
-    for i = 1:quantity do
+    for i = 1,quantity do
       local off_tindex = off_tindices[i]
-      local off_file = offdictr[off_tindex];
-      local off_file_parts = off_file.split('.')
+      local off_file = self.offdictr[off_tindex];
+      local off_file_parts = off_file:split('.')
       local catindex = label[i]
-      local cat = catarr[catindex]
-      local cat_dir = paths.concat(self.data_path, cat)
+      local cat = self.catarr[catindex]
+      local cat_dir = paths.concat(self.orig_data_path, cat)
       local rot_index = math.random(self.opt.rotated)
       local rot_off_file = off_file_parts[1] .. '_' .. rot_index .. '.mat'
       local full_off_file = paths.concat(cat_dir, rot_off_file)

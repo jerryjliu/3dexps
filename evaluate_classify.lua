@@ -86,11 +86,14 @@ end
 all_test_models = torch.ByteTensor(num_test, 1, opt.dim, opt.dim, opt.dim)
 truthTensor = torch.zeros(num_test)
 cached = false
-if paths.filep(testdata_f) then
-  cached=true
-  if opt.rotated > 0 then
+if opt.rotated > 0 then
+  if paths.filep(testdata_rotated_f) then
+    cached=true
     all_test_models = torch.load(testdata_rotated_f)
-  else
+  end
+else
+  if paths.filep(testdata_f) then
+    cached=true
     all_test_models = torch.load(testdata_f)
   end
 end
@@ -99,18 +102,19 @@ if opt.rotated > 0 then
 end
 cur_index = 1
 for test_file in paths.iterfiles(test_dir) do 
-  --print(('loading %d, %s'):format(cur_index, test_file))
+  print(('loading %d, %s'):format(cur_index, test_file))
   if not cached then
     if opt.rotated > 0 then
       local origFile = origfilemap[test_file]
       local origCat = catarr[truthlabels[test_file]]
-      local cat_dir = paths.concat(self.opt.orig_data_dir, origCat)
+      local cat_dir = paths.concat(orig_data_dir, origCat)
       for i = 1, opt.rotated do
-        local test_file_parts = test_file.split('.')
-        local test_file_name = test_file_parts[1]
-        local test_file_rot = test_file_name .. '_' .. opt.rotated .. '.mat'
-        local full_test_file_rot = paths.concat(cat_dir, test_file_rot)
-        local off_rot_tensor = mat.load(full_test_file_rot, 'off_volume')
+        local orig_file_parts = origFile:split('.')
+        local orig_file_name = orig_file_parts[1]
+        local orig_file_rot = orig_file_name .. '_' .. opt.rotated .. '.mat'
+        local full_orig_file_rot = paths.concat(cat_dir, orig_file_rot)
+        local off_rot_tensor = mat.load(full_orig_file_rot, 'off_volume')
+        assert(off_rot_tensor ~= nil)
         all_test_models[(cur_index - 1)*opt.rotated + i] = off_rot_tensor
       end
     else
@@ -123,7 +127,11 @@ for test_file in paths.iterfiles(test_dir) do
   cur_index = cur_index + 1
 end
 if not cached then
-  torch.save(testdata_f, all_test_models)
+  if opt.rotated > 0 then
+    torch.save(testdata_rotated_f, all_test_models)
+  else
+    torch.save(testdata_f, all_test_models)
+  end
 end
 
 -- run through all test data
