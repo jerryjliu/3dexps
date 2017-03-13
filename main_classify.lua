@@ -126,6 +126,7 @@ local label = torch.Tensor(opt.batchSize)
 local errC
 local valError = 0
 local prevValError = 0
+local prevLREpoch = -1
 local valClassError = 0
 if opt.gpu > 0 then
   input = input:cuda()
@@ -193,8 +194,9 @@ for epoch = begin_epoch, opt.niter do
   prevValError = valError
   valError = 1 - tmpAcc
   valClassError = 1 - tmpClassAcc
-  if epoch > begin_epoch and prevValError - valError < 0.001 then
+  if epoch > begin_epoch and prevValError - valError < 0.001 and (epoch - prevLREpoch) > 10 then
     optimStateC.learningRate = optimStateC.learningRate / 2
+    prevLREpoch = epoch
   end
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
@@ -217,7 +219,7 @@ for epoch = begin_epoch, opt.niter do
   netCheckFile = opt.name .. '_' .. epoch .. '_net_C.t7'
   optimStateCFile = opt.name .. '_' .. epoch .. '_net_optimStateC.t7'
   torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, netCheckFile), netC:clearState())
-  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateCFile), netC:clearState())
+  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStateCFile), optimStateC)
   parametersC, gradParametersC = netC:getParameters()
 
   print(('End of epoch %d / %d'):format(epoch, opt.niter))

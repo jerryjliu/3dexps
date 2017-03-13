@@ -93,6 +93,11 @@ optimStateP = {
   learningRate = opt.plr,
   beta1 = opt.beta1,
 }
+if opt.checkpointn > 0 then
+  netP = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_P.t7'))
+  optimStateC = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateP.t7'))
+end
+
 local criterion = nn.BCECriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
@@ -141,7 +146,9 @@ for epoch = begin_epoch, opt.niter do
   end
   parametersP, gradParametersP = nil,nil
   projCheckFile = opt.name .. '_' .. opt.genEpoch .. '_' .. epoch .. '_net_P.t7'
+  optimStatePFile = opt.name .. '_' .. opt.genEpoch .. '_' .. epoch .. '_net_optimStateP.t7'
   torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, projCheckFile), netP:clearState())
+  torch.save(paths.concat(opt.checkpointd .. opt.checkpointf, optimStatePFile), optimStateP)
   parametersP, gradParametersP = netP:getParameters()
   print(('End of epoch %d / %d'):format(epoch, opt.niter))
 end
