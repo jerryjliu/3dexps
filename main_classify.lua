@@ -193,7 +193,7 @@ for epoch = begin_epoch, opt.niter do
   prevValError = valError
   valError = 1 - tmpAcc
   valClassError = 1 - tmpClassAcc
-  if epoch > begin_epoch and prevValError - valError < 0.05 then
+  if epoch > begin_epoch and prevValError - valError < 0.001 then
     optimStateC.learningRate = optimStateC.learningRate / 2
   end
   for i = 1, data:size(), opt.batchSize do
