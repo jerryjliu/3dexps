@@ -140,6 +140,8 @@ end
 -- ex: input, noise, label, errG, errD, (epoch_tm, tm, data_tm - purely for timing purposes)
 -- criterion
 local criterion = nn.BCECriterion()
+local criterion_sum = nn.BCECriterion()
+criterion_sum.sizeAverage = false
 -- real batch - input to encoder
 local real = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local actualBatchSize = 0
@@ -167,6 +169,7 @@ if opt.gpu > 0 then
   netE = netE:cuda()
   netE = cudnn.convert(netE, cudnn)
   criterion = criterion:cuda()
+  criterion_sum = criterion_sum:cuda()
 end
 local parametersD, gradParametersD = netD:getParameters()
 local parametersG, gradParametersG = netG:getParameters()
@@ -176,22 +179,17 @@ local fEx = function(x)
   netE:zeroGradParameters()
   netG:zeroGradParameters()
 
-
   local realBatch, rclasslabels = data:getBatch(opt.batchSize)
   actualBatchSize = realBatch:size(1)
   real[{{1,actualBatchSize}}]:copy(realBatch)
   local tempproj = netE:forward(real[{{1,actualBatchSize}}])
   projnoise[{{1,actualBatchSize}}]:copy(tempproj)
   local tempgen = netG:forward(projnoise[{{1,actualBatchSize}}])
-  --print(tempgen[{1,1,1,1,{1,10}}])
-  --print(real[{1,1,1,1,{1,10}}])
-  errE = criterion:forward(tempgen, real[{{1,actualBatchSize}}])
-  local df_do = criterion:backward(tempgen, real[{{1,actualBatchSize}}])
+  errE = criterion_sum:forward(tempgen, real[{{1,actualBatchSize}}])
+  local df_do = criterion_sum:backward(tempgen, real[{{1,actualBatchSize}}])
   -- TODO: fix the magnitude of the contribution of the reconstruction loss to netG
-  --print(df_do[{1,1,1,1,{1,10}}])
   local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], df_do)
   gradParametersG:mul(opt.alpha_recon)
-  --print(gradParametersG[{{1000,1020}}])
   -- TODO: fix relative magnitudes of rec loss / KL divergence for netE
   netE:backward(real[{{1,actualBatchSize}}], df_de)
 

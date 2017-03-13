@@ -8,6 +8,7 @@ assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() m
 opt = {
   leakyslope = 0.2,
   clr = 0.00005,
+  lr_decay = false,
   beta1 = 0.5,
   batchSize = 100,
   --nout = 32,
@@ -43,6 +44,14 @@ if opt.gpu > 0 then
   require 'cudnn'
   require 'cutorch'
   cutorch.setDevice(opt.gpu)
+  freeMem4, totalMem4 = cutorch.getMemoryUsage(4)
+  freeMem3, totalMem3 = cutorch.getMemoryUsage(3)
+  freeMem2, totalMem2 = cutorch.getMemoryUsage(2)
+  freeMem1, totalMem1 = cutorch.getMemoryUsage(1)
+  print(freeMem4 .. ' ' .. totalMem4)
+  print(freeMem3 .. ' ' .. totalMem3)
+  print(freeMem2 .. ' ' .. totalMem2)
+  print(freeMem1 .. ' ' .. totalMem1)
 end
 
 -- Initialize data loader --
@@ -180,6 +189,9 @@ begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
   tmpAcc, tmpClassAcc = measure_validation_error(data, opt)
+  if epoch > begin_epoch and valError - (1 - tmpAcc) < 0.05 then
+    opt.clr = opt.clr / 2
+  end
   valError = 1 - tmpAcc
   valClassError = 1 - tmpClassAcc
   for i = 1, data:size(), opt.batchSize do

@@ -22,6 +22,9 @@ function data.new(opt)
   self.opt = opt
 
   -- initialize variables
+  if self.opt.rotated == nil then
+    self.opt.rotated = 0
+  end
   if self.opt.rotated > 0 then
     assert(self.opt.orig_data_path ~= nil)
     self.orig_data_path = paths.concat(self.opt.data_dir, self.opt.orig_data_path)
@@ -207,6 +210,7 @@ end
 
 --- sample uniformly across categories, so each category has an equal weight
 function data:getBatchUniformSample(quantity)
+  assert(self.offdictr ~= nil)
   local label = torch.Tensor(quantity)
   local visited = {}
   local i = 1
