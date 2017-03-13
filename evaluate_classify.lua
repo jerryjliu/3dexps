@@ -97,12 +97,13 @@ else
     all_test_models = torch.load(testdata_f)
   end
 end
-if opt.rotated > 0 then
+
+if not cached and opt.rotated > 0 then
   all_test_models = torch.ByteTensor(num_test * opt.rotated, 1, opt.dim, opt.dim, opt.dim)
 end
 cur_index = 1
 for test_file in paths.iterfiles(test_dir) do 
-  print(('loading %d, %s'):format(cur_index, test_file))
+  print(('loading %d, %s, %s'):format(cur_index, test_file, catarr[truthlabels[test_file]]))
   if not cached then
     if opt.rotated > 0 then
       local origFile = origfilemap[test_file]
@@ -176,8 +177,8 @@ for i = 1, maxindices:size(1) do
   if (maxindices[{i, 1}] == truthTensor[i]) then
     accuracy = accuracy + 1
   else
-    print('ACTUAL CATEGORY: ' .. catarr[truthTensor[i]])
-    print('PREDICTED CATEGORY: ' .. catarr[maxindices[{i,1}]])
+    --print('ACTUAL CATEGORY: ' .. catarr[truthTensor[i]])
+    --print('PREDICTED CATEGORY: ' .. catarr[maxindices[{i,1}]])
     -- calculate precision/recall for chairs
   end
 
