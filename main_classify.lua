@@ -125,6 +125,7 @@ local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
 local errC
 local valError = 0
+local prevValError = 0
 local valClassError = 0
 if opt.gpu > 0 then
   input = input:cuda()
@@ -189,15 +190,16 @@ begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
   tmpAcc, tmpClassAcc = measure_validation_error(data, opt)
-  if epoch > begin_epoch and valError - (1 - tmpAcc) < 0.05 then
-    opt.clr = opt.clr / 2
-  end
+  prevValError = valError
   valError = 1 - tmpAcc
   valClassError = 1 - tmpClassAcc
+  if epoch > begin_epoch and prevValError - valError < 0.05 then
+    optimStateC.learningRate = optimStateC.learningRate / 2
+  end
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
-    print('Optimizing proj network')
+    print('Optimizing classification network, lr: ' .. optimStateC.learningRate)
     if opt.nmomentum > 0 then
       optim.sgd(fCx, parametersC, optimStateC)
     else
