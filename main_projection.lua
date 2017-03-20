@@ -40,6 +40,7 @@ if opt.gpu > 0 then
   require 'cudnn'
   require 'cutorch'
   cutorch.setDevice(opt.gpu)
+  nn.DataParallelTable.deserializeNGPUs = 1
 end
 
 -- Initialize data loader --
@@ -86,6 +87,10 @@ end
 print(opt.name .. '_' .. opt.genEpoch .. '_net_G.t7')
 local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt.name .. '_' .. opt.genEpoch .. '_net_G.t7'))
 --netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
+-- comment out below line if not parallel
+print(netG)
+netG = netG:get(1)
+print(netG)
 netG:training()
 
 -- Classifier to use (for their feature space)
@@ -111,7 +116,8 @@ if opt.checkpointn > 0 then
   optimStateC = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateP.t7'))
 end
 
-local criterion = nn.BCECriterion()
+--local criterion = nn.BCECriterion()
+local criterion = nn.MSECriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
 local errP
@@ -130,6 +136,7 @@ if opt.gpu > 0 then
 end
 
 local parametersP, gradParametersP = netP:getParameters()
+local parametersF, gradParametersF = netF:getParameters()
 -- update step Adam optim
 local fPx = function(x)
   netP:zeroGradParameters()
@@ -137,14 +144,13 @@ local fPx = function(x)
   local actualBatchSize = sample:size(1)
   input[{{1,actualBatchSize}}]:copy(sample)
   local latent = netP:forward(input[{{1,actualBatchSize}}])
-
   local projout = netG:forward(latent)
+
   local df_do
   if netF ~= nil then
     local featout = netF:forward(input[{{1,actualBatchSize}}])
+    featout = featout:clone()
     local projfeatout = netF:forward(projout)
-    print(featout[{1,1,1,1,{20,30}}])
-    print(projfeatout[{1,1,1,1,{20,30}}])
     errP = criterion:forward(projfeatout, featout)
     local df_dc = criterion:backward(projfeatout, featout)
     df_do = netF:updateGradInput(projout, df_dc)
