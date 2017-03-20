@@ -86,13 +86,16 @@ netC:add(nn.LeakyReLU(opt.leakyslope, true))
 netC:add(nn.VolumetricDropout(0.2))
 -- 32x32x32x32 -> 32x15x15x15
 netC:add(nn.VolumetricConvolution(32,32,5,5,5,2,2,2,1,1,1))
+netC:add(nn.VolumetricBatchNormalization(32))
 netC:add(nn.LeakyReLU(opt.leakyslope,true))
 netC:add(nn.VolumetricDropout(0.3))
 -- 32x15x15x15 -> 32x12x12x12
 netC:add(nn.VolumetricConvolution(32,32,3,3,3,1,1,1))
+netC:add(nn.VolumetricBatchNormalization(32))
 netC:add(nn.LeakyReLU(opt.leakyslope,true))
 -- 32x12x12x12 -> 32x6x6x6
 netC:add(nn.VolumetricMaxPooling(2,2,2))
+netC:add(nn.VolumetricBatchNormalization(32))
 netC:add(nn.VolumetricDropout(0.4))
 -- 32x6x6x6 -> 128
 netC:add(nn.View(6912))
@@ -100,7 +103,7 @@ netC:add(nn.Linear(6912,128))
 netC:add(nn.ReLU(true))
 netC:add(nn.Dropout(0.5))
 -- 128 -> 101
-netC:add(nn.Linear(128,opt.nc))
+netC:add(nn.Linear(128,opt.nc or 101))
 
 -- Voxception
 local netC_Vox = nn.Sequential()
@@ -120,7 +123,7 @@ netC_Vox:add(nn.View(8192))
 netC_Vox:add(nn.Linear(8192,128))
 --netC_Vox:add(nn.Dropout(0.5))
 netC_Vox:add(nn.LeakyReLU(opt.leakyslope, true))
-netC_Vox:add(nn.Linear(128,opt.nc))
+netC_Vox:add(nn.Linear(128,opt.nc or 101))
 
 net64 = {}
 net64.netG = netG
