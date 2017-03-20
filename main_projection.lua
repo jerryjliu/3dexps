@@ -12,6 +12,7 @@ opt = {
   batchSize = 100,
   --nout = 32,
   nz = 200,
+  nc=101,
   niter = 25,
   gpu = 2,
   name = 'shapenet101',
@@ -20,6 +21,8 @@ opt = {
   data_name = 'full_dataset_voxels_32_chair',
   checkpointd = '/data/jjliu/checkpoints/',
   gen_checkpointf='checkpoints_64chair100o',
+  feat_checkpointf='checkpoints_64class100',
+  feat_epochf = 'shapenet101_25_net_C_split7',
   out_ext = '',
   checkpointn = 0,
   is32 = 1,
@@ -84,7 +87,17 @@ print(opt.name .. '_' .. opt.genEpoch .. '_net_G.t7')
 local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt.name .. '_' .. opt.genEpoch .. '_net_G.t7'))
 --netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
 netG:training()
---netG:evaluate() -- batch normalization behaves differently during evaluation
+
+-- Classifier to use (for their feature space)
+if opt.feat_checkpointf == '' then
+  opt.feat_checkpointf = nil
+end
+local netF = nil
+if opt.feat_checkpointf ~= nil then
+  netF = torch.load(paths.concat(opt.checkpointd .. opt.feat_checkpointf, opt.feat_epochf .. '.t7'))
+  netF:training()
+  print(netF)
+end
 
 -- Projection network
 local netP = net.netP
@@ -110,6 +123,10 @@ if opt.gpu > 0 then
   netP = cudnn.convert(netP, cudnn)
   netG = netG:cuda()
   netG = cudnn.convert(netG, cudnn)
+  if netF ~= nil then
+    netF = netF:cuda()
+    netF = cudnn.convert(netF, cudnn)
+  end
 end
 
 local parametersP, gradParametersP = netP:getParameters()
@@ -122,8 +139,19 @@ local fPx = function(x)
   local latent = netP:forward(input[{{1,actualBatchSize}}])
 
   local projout = netG:forward(latent)
-  errP = criterion:forward(projout, input[{{1,actualBatchSize}}])
-  local df_do = criterion:backward(projout, input[{{1,actualBatchSize}}])
+  local df_do
+  if netF ~= nil then
+    local featout = netF:forward(input[{{1,actualBatchSize}}])
+    local projfeatout = netF:forward(projout)
+    print(featout[{1,1,1,1,{20,30}}])
+    print(projfeatout[{1,1,1,1,{20,30}}])
+    errP = criterion:forward(projfeatout, featout)
+    local df_dc = criterion:backward(projfeatout, featout)
+    df_do = netF:updateGradInput(projout, df_dc)
+  else
+    errP = criterion:forward(projout, input[{{1,actualBatchSize}}])
+    df_do = criterion:backward(projout, input[{{1,actualBatchSize}}])
+  end
   local df_dz = netG:updateGradInput(latent, df_do)
   netP:backward(input[{{1,actualBatchSize}}], df_dz)
 

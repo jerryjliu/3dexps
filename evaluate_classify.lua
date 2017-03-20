@@ -20,6 +20,8 @@ cmd:option('-cachedir', '/data/jjliu/cache', 'path of cache directory (for loadi
 cmd:option('-catarr', 'all_models_catarr_data', 'name of catarr file from cache directory (for loading above)')
 cmd:option('-catpr', 'chair', 'measure precision recall of a category')
 cmd:option('-rotated',0, 'whether to evaluate each test obj on an ensemble of rotated views or not')
+-- TODO: incomplete
+cmd:option('-avg', false, 'whether to average predictions or use a voting approach (not necessary if opt.rotated=0')
 
 opt = cmd:parse(arg or {})
 if opt.gpu > 0 then
