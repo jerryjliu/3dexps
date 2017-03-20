@@ -53,7 +53,7 @@ print(netC)
 --if opt.gpu == 0 then
   netC = netC:double()
 --end
-netC:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
+--netC:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
 netC:evaluate() -- batch normalization behaves differently during evaluation
 
 -- load labels
@@ -160,7 +160,7 @@ for i = 1, math.ceil(num_test / bs) do
     end
   else
     input[{{1,ind_high-ind_low+1},{},{},{},{}}] = all_test_models[{{ind_low,ind_high},{},{},{},{}}]
-    res = netC:forward(input):double()
+    local res = netC:forward(input):double()
     results[{{ind_low,ind_high},{}}] = res[{{1,ind_high-ind_low+1},{}}]
   end
 end
