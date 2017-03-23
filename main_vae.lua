@@ -9,6 +9,7 @@ opt = {
   elr = 0.00005,
   glr = 0.001,
   dlr = 0.00008,
+  zsample = 'normal', -- 'normal', 'uniform1', 'uniform2'
   alpha_recon = 1,
   beta1 = 0.5,
   batchSize = 40,
@@ -185,8 +186,8 @@ local fEx = function(x)
   local tempproj = netE:forward(real[{{1,actualBatchSize}}])
   projnoise[{{1,actualBatchSize}}]:copy(tempproj)
   local tempgen = netG:forward(projnoise[{{1,actualBatchSize}}])
-  errE = criterion_sum:forward(tempgen, real[{{1,actualBatchSize}}])
-  local df_do = criterion_sum:backward(tempgen, real[{{1,actualBatchSize}}])
+  errE = criterion:forward(tempgen, real[{{1,actualBatchSize}}])
+  local df_do = criterion:backward(tempgen, real[{{1,actualBatchSize}}])
   -- TODO: fix the magnitude of the contribution of the reconstruction loss to netG
   local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], df_do)
   gradParametersG:mul(opt.alpha_recon)
@@ -223,7 +224,13 @@ local fDx = function(x)
 
   print('copying half of projnoise into noise, so samples from both p(z) and q(z | x)')
   --noise:uniform(0,1)
-  noise:normal(0,1)
+  if opt.zsample == 'normal' then
+    noise:normal(0,1)
+  elseif opt.zsample == 'uniform1' then
+    noise:uniform(0,1)
+  elseif opt.zsample == 'uniform2' then
+    noise:uniform(-1,1)
+  end
   noise[{{1,actualBatchSize/2}}]:copy(projnoise[{{1,actualBatchSize/2}}])
   local fake = netG:forward(noise[{{1,actualBatchSize}}])
   input[{{1, actualBatchSize}}]:copy(fake)

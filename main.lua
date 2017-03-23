@@ -10,6 +10,7 @@ opt = {
   --dlr = 0.00003,
   glr = 0.001, -- G=0.0025
   dlr = 0.00008, -- D=0.00001
+  zsample = 'uniform1', -- 'normal', 'uniform1', 'uniform2'
   --glr = 0.00125,
   --dlr = 0.000005,
   --glr = 0.0021, -- scaling by 0.7 from 100
@@ -184,7 +185,14 @@ local fDx = function(x)
   end
 
   print('getting fake batch')
-  noise:uniform(0, 1)
+  --noise:uniform(0, 1)
+  if opt.zsample == 'normal' then
+    noise:normal(0,1)
+  elseif opt.zsample == 'uniform1' then
+    noise:uniform(0,1)
+  elseif opt.zsample == 'uniform2' then
+    noise:uniform(-1,1)
+  end
   local fake = netG:forward(noise)
   input:copy(fake)
   label:fill(fake_label)
