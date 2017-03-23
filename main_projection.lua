@@ -8,6 +8,7 @@ opt = {
   genEpoch = 580,
   leakyslope = 0.2,
   plr = 0.00005,
+  lr_decay = false,
   beta1 = 0.5,
   batchSize = 100,
   --nout = 32,
@@ -88,7 +89,6 @@ print(opt.name .. '_' .. opt.genEpoch .. '_net_G.t7')
 local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt.name .. '_' .. opt.genEpoch .. '_net_G.t7'))
 --netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
 -- comment out below line if not parallel
-print(netG)
 netG = netG:get(1)
 print(netG)
 netG:training()
@@ -107,6 +107,7 @@ end
 -- Projection network
 local netP = net.netP
 netP:apply(weights_init)
+print(netP)
 optimStateP = {
   learningRate = opt.plr,
   beta1 = opt.beta1,
@@ -121,6 +122,8 @@ local criterion = nn.MSECriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
 local errP
+local avgErrP, prevAvgErrP
+local prevLREpoch = -1
 if opt.gpu > 0 then
   input = input:cuda()
   label = label:cuda()
@@ -167,14 +170,24 @@ end
 begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
+  if opt.lr_decay and epoch > begin_epoch and prevAvgErrP - avgErrP < 0.005 and (epoch - prevLREpoch) > 6 then
+    optimStateP.learningRate = optimStateP.learningRate / 2
+    prevLREpoch = epoch
+  end
+  prevAvgErrP = avgErrP
+  avgErrP = 0
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
     print('Optimizing proj network')
     optim.adam(fPx, parametersP, optimStateP)
+    local ind_low = i
+    local ind_high = math.min(data:size(), i + opt.batchSize - 1)
+    avgErrP = avgErrP + ((ind_high - ind_low + 1) * errP)
     -- logging
     print(('Epoch: [%d][%8d / %8d]\t Err_P: %.4f'):format(epoch, (i-1)/(opt.batchSize), math.floor(data:size()/(opt.batchSize)),errP))
   end
+  avgErrP = avgErrP / data:size()
   if paths.dir(opt.checkpointd .. opt.checkpointf) == nil then
     paths.mkdir(opt.checkpointd .. opt.checkpointf)
   end

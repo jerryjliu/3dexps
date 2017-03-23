@@ -73,7 +73,8 @@ netP:add(nn.VolumetricBatchNormalization(512))
 netP:add(nn.LeakyReLU(opt.leakyslope, true))
 -- 512x4x4x4 -> 200x1x1x1
 netP:add(nn.VolumetricConvolution(512,200,4,4,4))
-netP:add(nn.Sigmoid())
+--netP:add(nn.Sigmoid())
+netP:add(nn.Tanh())
 
 
 -- Volumetric Classifier (learn better features representations)
