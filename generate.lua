@@ -8,7 +8,7 @@ assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() m
 cmd = torch.CmdLine()
 cmd:option('-gpu', 0, 'GPU id, starting from 1. Set it to 0 to run it in CPU mode. ')
 cmd:option('-sample', false, 'whether to sample input latent vectors from an i.i.d. uniform distribution, or to generate shapes with demo vectors')
-cmd:option('-normal', false, 'whether to sample from a uniform dist (false) or a normal (true)')
+cmd:option('-zsample', 'uniform1', 'sample z Uniform[0,1] (uniform1), Uniform[-1,1] (uniform2), Normal(0,1) (normal)')
 cmd:option('-bs', 100, 'batch size')
 cmd:option('-ss', 100, 'number of generated shapes, only used in `-sample` mode')
 cmd:option('-ck', 25, 'Checkpoint to start from (default is 25)')
@@ -59,9 +59,14 @@ netG:evaluate() -- batch normalization behaves differently during evaluation
 
 print('Setting inputs..')
 inputs = torch.rand(opt.ss, nz + opt.nc, 1, 1, 1)
-if opt.normal then
+if opt.zsample == 'uniform2' then
+  inputs:uniform(-1,1)
+elseif opt.zsample == 'normal' then
   inputs:normal(0,1)
 end
+--if opt.normal then
+  --inputs:normal(0,1)
+--end
 input = torch.Tensor(opt.bs, nz + opt.nc, 1, 1, 1)
 if opt.gpu > 0 then
   netG = netG:cuda()
@@ -87,6 +92,8 @@ for i = 1, math.ceil(opt.ss / opt.bs) do
   input:zero() 
   input[{{1,ind_high-ind_low+1},{},{},{},{}}] = inputs[{{ind_low,ind_high},{},{},{},{}}]
   res = netG:forward(input):double()
+  print(res:size())
+  print(results:size())
   results[{{ind_low,ind_high},{},{},{},{}}] = res[{{1,ind_high-ind_low+1},{},{},{},{}}]
   --print(res[1])
 end

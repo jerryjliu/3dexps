@@ -90,6 +90,7 @@ local netG = torch.load(paths.concat(opt.checkpointd .. opt.gen_checkpointf, opt
 --netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
 -- comment out below line if not parallel
 netG = netG:get(1)
+netG = netG:double()
 print(netG)
 netG:training()
 
@@ -100,6 +101,7 @@ end
 local netF = nil
 if opt.feat_checkpointf ~= nil then
   netF = torch.load(paths.concat(opt.checkpointd .. opt.feat_checkpointf, opt.feat_epochf .. '.t7'))
+  netF = netF:double()
   netF:training()
   print(netF)
 end
@@ -122,7 +124,8 @@ local criterion = nn.MSECriterion()
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local label = torch.Tensor(opt.batchSize)
 local errP
-local avgErrP, prevAvgErrP
+local avgErrP = nil
+local prevAvgErrP = 1
 local prevLREpoch = -1
 if opt.gpu > 0 then
   input = input:cuda()
@@ -174,12 +177,14 @@ for epoch = begin_epoch, opt.niter do
     optimStateP.learningRate = optimStateP.learningRate / 2
     prevLREpoch = epoch
   end
-  prevAvgErrP = avgErrP
+  if avgErrP ~= nil then
+    prevAvgErrP = avgErrP
+  end
   avgErrP = 0
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute
     -- BCE loss on generator and discriminator
-    print('Optimizing proj network')
+    print(('Optimizing proj network, learning rate: %.4f'):format(optimStateP.learningRate))
     optim.adam(fPx, parametersP, optimStateP)
     local ind_low = i
     local ind_high = math.min(data:size(), i + opt.batchSize - 1)
