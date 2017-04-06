@@ -18,7 +18,7 @@ opt = {
 }
 for k,v in pairs(opt) do 
   opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] 
-  print(k .. ': ' .. opt[k])
+  --print(k .. ': ' .. opt[k])
 end 
 
 if opt.gpu > 0 then
@@ -45,9 +45,11 @@ if opt.removeDropout then
     done = true
     for i = 1, net:size() do
       local name = torch.type(net:get(i))
+      local drop_p = net:get(i).p
       print(name)
       if name:find('Dropout') then
         net:remove(i)
+        net:insert(nn.Mul(1-drop_p), i)
         done = false
       end
     end
