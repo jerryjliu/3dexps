@@ -161,7 +161,7 @@ function measure_validation_error(data, opt)
   netC:evaluate()
   local valset_models, valset_labels = data:loadValidationSet()
   if valset_models == nil then
-    return
+    return -1, -1
   end
   local accuracy = 0
   local class_accuracy = 0
@@ -191,12 +191,14 @@ begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
   tmpAcc, tmpClassAcc = measure_validation_error(data, opt)
-  prevValError = valError
-  valError = 1 - tmpAcc
-  valClassError = 1 - tmpClassAcc
-  if opt.lr_decay and epoch > begin_epoch and prevValError - valError < 0.001 and (epoch - prevLREpoch) > 20 then
-    optimStateC.learningRate = optimStateC.learningRate / 2
-    prevLREpoch = epoch
+  if tmpAcc ~= -1 then
+    prevValError = valError
+    valError = 1 - tmpAcc
+    valClassError = 1 - tmpClassAcc
+    if opt.lr_decay and epoch > begin_epoch and prevValError - valError < 0.001 and (epoch - prevLREpoch) > 20 then
+      optimStateC.learningRate = optimStateC.learningRate / 2
+      prevLREpoch = epoch
+    end
   end
   for i = 1, data:size(), opt.batchSize do
     -- for each batch, first generate 50 generated samples and compute

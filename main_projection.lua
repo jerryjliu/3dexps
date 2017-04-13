@@ -27,6 +27,7 @@ opt = {
   out_ext = '',
   checkpointn = 0,
   is32 = 1,
+  dropInput=0.3
 }
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end 
 
@@ -149,7 +150,16 @@ local fPx = function(x)
   local sample, labels = data:getBatch(opt.batchSize)
   local actualBatchSize = sample:size(1)
   input[{{1,actualBatchSize}}]:copy(sample)
-  local latent = netP:forward(input[{{1,actualBatchSize}}])
+  local input_drop = input:clone()
+  local dropLayer = nn.Dropout(opt.dropInput)
+  if opt.gpu > 0 then
+    dropLayer = dropLayer:cuda()
+    dropLayer = cudnn.convert(dropLayer, cudnn)
+  end
+  if opt.dropInput > 0 then
+    input_drop = dropLayer:forward(input)
+  end
+  local latent = netP:forward(input_drop[{{1,actualBatchSize}}])
   local projout = netG:forward(latent)
 
   local df_do
@@ -173,7 +183,7 @@ end
 begin_epoch = opt.checkpointn + 1
 for epoch = begin_epoch, opt.niter do
   data:resetAndShuffle()
-  if opt.lr_decay and epoch > begin_epoch and prevAvgErrP - avgErrP < 0.005 and (epoch - prevLREpoch) > 6 then
+  if opt.lr_decay and epoch > begin_epoch and prevAvgErrP - avgErrP < 0.005 and (epoch - prevLREpoch) > 15 then
     optimStateP.learningRate = optimStateP.learningRate / 2
     prevLREpoch = epoch
   end
