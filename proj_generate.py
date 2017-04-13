@@ -40,6 +40,22 @@ def load_projection(checkpoint_path, genEpoch, epoch, evaluate, ext=''):
         netP.evaluate()
     return netP
 
+def load_split_classifier(checkpoint_path, classEpoch, splitIndex, evaluate=True):
+    checkpoint_proj_path = os.path.join('/data/jjliu/checkpoints/',checkpoint_path)
+    class_path = os.path.join(checkpoint_proj_path, 'shapenet101_'+str(classEpoch)+'_net_C_split'+str(splitIndex)+'.t7')
+    print(class_path)
+    netC = load_lua(class_path)
+    print(netC)
+    if evaluate:
+        netC.evaluate()
+    return netC
+
+def project_input(netP, netG, inp):
+    latent = netP.forward(inp)
+    output = netG.forward(latent)
+    return output, latent
+
+
 if __name__ == "__main__": 
     # parse args from command line
     parser = OptionParser()
