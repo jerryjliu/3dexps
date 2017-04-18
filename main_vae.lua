@@ -189,8 +189,8 @@ local fEx = function(x)
   errE = criterion:forward(tempgen, real[{{1,actualBatchSize}}])
   local df_do = criterion:backward(tempgen, real[{{1,actualBatchSize}}])
   -- TODO: fix the magnitude of the contribution of the reconstruction loss to netG
-  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], df_do)
-  gradParametersG:mul(opt.alpha_recon)
+  local df_de = netG:backward(projnoise[{{1,actualBatchSize}}], opt.alpha_recon * df_do)
+  --gradParametersG:mul(opt.alpha_recon)
   -- TODO: fix relative magnitudes of rec loss / KL divergence for netE
   netE:backward(real[{{1,actualBatchSize}}], df_de)
 
@@ -225,6 +225,7 @@ local fDx = function(x)
   print('copying half of projnoise into noise, so samples from both p(z) and q(z | x)')
   --noise:uniform(0,1)
   if opt.zsample == 'normal' then
+    print('sampling normal noise')
     noise:normal(0,1)
   elseif opt.zsample == 'uniform1' then
     noise:uniform(0,1)
