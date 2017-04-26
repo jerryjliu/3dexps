@@ -107,16 +107,6 @@ netG:apply(weights_init)
 local netD = net.netD
 netD:apply(weights_init)
 
-if opt.gpu2 > 0 then
-  tempnet = nn.DataParallelTable(1)
-  tempnet:add(netG, {opt.gpu, opt.gpu2})
-  netG = tempnet
-
-  tempnet = nn.DataParallelTable(1)
-  tempnet:add(netD, {opt.gpu, opt.gpu2})
-  netD = tempnet
-end
-
 optimStateG = {
   learningRate = opt.glr,
   beta1 = opt.beta1,
@@ -131,6 +121,16 @@ if opt.checkpointn > 0 then
   netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
   optimStateG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateG.t7'))
   optimStateD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateD.t7'))
+end
+
+if opt.gpu2 > 0 then
+  tempnet = nn.DataParallelTable(1)
+  tempnet:add(netG, {opt.gpu, opt.gpu2})
+  netG = tempnet
+
+  tempnet = nn.DataParallelTable(1)
+  tempnet:add(netD, {opt.gpu, opt.gpu2})
+  netD = tempnet
 end
 
 

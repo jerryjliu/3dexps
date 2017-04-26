@@ -108,18 +108,23 @@ netC:add(nn.Linear(128,opt.nc or 101))
 
 -- Voxception
 local netC_Vox = nn.Sequential()
+-- 1x64x64x64 -> 32x32x32x32
 netC_Vox:add(vl.Voxception(5,1,16,opt))
 netC_Vox:add(vl.VoxceptionDown(5,32,8,opt))
 netC_Vox:add(nn.VolumetricDropout(0.2))
+-- 32x32x32x32 -> 32x16x16x16
 netC_Vox:add(vl.Voxception(5,32,16,opt))
 netC_Vox:add(vl.VoxceptionDown(5,32,8,opt))
 netC_Vox:add(nn.VolumetricDropout(0.4))
+-- 32x16x16x16 -> 64x8x8x8
 netC_Vox:add(vl.Voxception(5,32,32,opt))
 netC_Vox:add(vl.VoxceptionDown(5,64,16,opt))
 netC_Vox:add(nn.VolumetricDropout(0.5))
+-- 64x8x8x8 -> 128x4x4x4
 netC_Vox:add(vl.Voxception(5,64,64,opt))
 netC_Vox:add(vl.VoxceptionDown(5,128,32,opt))
 netC_Vox:add(nn.VolumetricDropout(0.5))
+-- 128x4x4x4 -> 101
 netC_Vox:add(nn.View(8192))
 netC_Vox:add(nn.Linear(8192,128))
 netC_Vox:add(nn.Dropout(0.5))
