@@ -31,7 +31,12 @@ function data.new(opt)
   end
   self.data_path = paths.concat(self.opt.data_dir, self.opt.data_name)
   if self.opt.contains_split then
-    self.data_path = paths.concat(self.data_path, 'data')
+    local new_data_path = paths.concat(self.data_path, 'data')
+    if paths.dir(new_data_path) == nil then
+      new_data_path = paths.concat(self.data_path, 'train')
+    end
+    self.data_path = new_data_path
+
   end
   self.all_models_tensor_p = self.opt.cache_dir .. 'all_models_tensor_' .. self.opt.data_name .. '.t7'
   self.all_models_catarr_p = self.opt.cache_dir .. 'all_models_catarr_' .. self.opt.data_name .. '.t7'
@@ -39,6 +44,8 @@ function data.new(opt)
   self.all_models_catdictr_p = self.opt.cache_dir .. 'all_models_catdictr_' .. self.opt.data_name .. '.t7'
   self.all_models_offdictr_p = self.opt.cache_dir .. 'all_models_offdictr_' .. self.opt.data_name .. '.t7'
 
+  print(self.opt)
+  print(self.opt.contains_split)
   print(self.data_path)
 
   local catarr = {}
@@ -50,8 +57,10 @@ function data.new(opt)
   for i, v in ipairs(cats) do
     if v ~= '.' and v ~= '..' then
       cat = cats[i]
+      print(v)
       cat_path = paths.concat(self.data_path, cat)
       cat_models = paths.dir(cat_path)
+      print(cat_models)
       for j, v2 in ipairs(cat_models) do
         if v2 ~= '.' and v2 ~= '..' then
           self._size = self._size + 1

@@ -107,15 +107,6 @@ netG:apply(weights_init)
 local netD = net.netD
 netD:apply(weights_init)
 
-if opt.gpu2 > 0 then
-  tempnet = nn.DataParallelTable(1)
-  tempnet:add(netG, {opt.gpu, opt.gpu2})
-  netG = tempnet
-
-  tempnet = nn.DataParallelTable(1)
-  tempnet:add(netD, {opt.gpu, opt.gpu2})
-  netD = tempnet
-end
 
 optimStateG = {
   learningRate = opt.glr,
@@ -133,6 +124,15 @@ if opt.checkpointn > 0 then
   optimStateD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateD.t7'))
 end
 
+if opt.gpu2 > 0 then
+  tempnet = nn.DataParallelTable(1)
+  tempnet:add(netG, {opt.gpu, opt.gpu2})
+  netG = tempnet
+
+  tempnet = nn.DataParallelTable(1)
+  tempnet:add(netD, {opt.gpu, opt.gpu2})
+  netD = tempnet
+end
 
 -------------------------------------------------
 -- put all cudnn-enabled variables here --

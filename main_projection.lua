@@ -116,8 +116,10 @@ optimStateP = {
   beta1 = opt.beta1,
 }
 if opt.checkpointn > 0 then
-  netP = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_P.t7'))
-  optimStateC = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_optimStateP.t7'))
+  projCheckFile = opt.name .. '_' .. opt.genEpoch .. '_' .. opt.checkpointn .. '_net_P.t7'
+  optimStatePFile = opt.name .. '_' .. opt.genEpoch .. '_' .. opt.checkpointn .. '_net_optimStateP.t7'
+  netP = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, projCheckFile))
+  optimStateP = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, optimStatePFile))
 end
 
 --local criterion = nn.BCECriterion()

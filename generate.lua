@@ -54,7 +54,7 @@ for i,module in ipairs(netG:listModules()) do
 end
 nz = 200
 --nz = netG:get(1).nInputPlane
-netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
+--netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
 netG:evaluate() -- batch normalization behaves differently during evaluation
 
 print('Setting inputs..')

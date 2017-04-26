@@ -27,6 +27,7 @@ opt = {
   nskip = 5,
   is32 = 1,
   nc = 0,
+  contains_split=false,
 }
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end 
 

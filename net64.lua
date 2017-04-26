@@ -75,6 +75,7 @@ netP:add(nn.LeakyReLU(opt.leakyslope, true))
 netP:add(nn.VolumetricConvolution(512,200,4,4,4))
 --netP:add(nn.Sigmoid())
 netP:add(nn.Tanh())
+--netP:add(nn.Mul())
 
 
 -- Volumetric Classifier (learn better features representations)
