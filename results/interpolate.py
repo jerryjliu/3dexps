@@ -1,7 +1,8 @@
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import torch.nn as nn
 import torch.legacy.nn
-import os
 from optparse import OptionParser
 import scipy.io as sio
 from torch.utils.serialization import load_lua

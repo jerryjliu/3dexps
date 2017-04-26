@@ -107,7 +107,6 @@ netG:apply(weights_init)
 local netD = net.netD
 netD:apply(weights_init)
 
-
 optimStateG = {
   learningRate = opt.glr,
   beta1 = opt.beta1,
