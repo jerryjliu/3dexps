@@ -5,6 +5,7 @@ require 'paths'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
 opt = {
+  leastsquares = false,
   leakyslope = 0.2,
   --glr = 0.002,
   --dlr = 0.00003,
@@ -87,7 +88,8 @@ local function weights_init(m)
     print(m)
     print(std)
     if m.bias then 
-      m.bias:fill(0) 
+      --m.bias:fill(0) 
+      m.bias:fill(0)
     end
   elseif name:find('BatchNormalization') then
     --if m.weight then m.weight:fill(0) end
@@ -116,6 +118,22 @@ optimStateD = {
   beta1 = opt.beta1,
 }
 
+------------------------------
+--If least squares GAN, then remove Sigmoid layer in discriminator
+------------------------------
+if opt.leastsquares then
+  print("REMOVING SIGMOID")
+  numLayers = netD:size()
+  for i = 1, numLayers do 
+    m = netD:get(i)
+    local name = torch.type(m)
+    if name:find('Sigmoid') then
+      netD:remove(i)
+      break
+    end
+  end
+end
+
 if opt.checkpointn > 0 then
   netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
   netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
@@ -133,11 +151,16 @@ if opt.gpu2 > 0 then
   netD = tempnet
 end
 
+
+
 -------------------------------------------------
 -- put all cudnn-enabled variables here --
 -- ex: input, noise, label, errG, errD, (epoch_tm, tm, data_tm - purely for timing purposes)
 -- criterion
 local criterion = nn.BCECriterion()
+if opt.leastsquares then
+  criterion = nn.MSECriterion()
+end
 -- input to discriminator
 local input = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 -- input to generator
@@ -186,10 +209,13 @@ local fDx = function(x)
   print('getting fake batch')
   --noise:uniform(0, 1)
   if opt.zsample == 'normal' then
+    print('sampling normal dist')
     noise:normal(0,1)
   elseif opt.zsample == 'uniform1' then
+    print('SHOULD NOT HIT THIS')
     noise:uniform(0,1)
   elseif opt.zsample == 'uniform2' then
+    print('SHOULD NOT HIT THIS')
     noise:uniform(-1,1)
   end
   local fake = netG:forward(noise)
