@@ -45,16 +45,16 @@ print(netD)
 print(netD)
 
 print(netG)
-for i,module in ipairs(netG:listModules()) do
-  if i == 2 then
-    paramsG = module:getParameters()
-    print(module)
-    print(paramsG[{{1,100}}])
-  end
-end
+--for i,module in ipairs(netG:listModules()) do
+  --if i == 2 then
+    --paramsG = module:getParameters()
+    --print(module)
+    --print(paramsG[{{1,100}}])
+  --end
+--end
 nz = 200
 --nz = netG:get(1).nInputPlane
---netG:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)     -- convolution bias is removed during training
+netG:apply(function(m) if torch.type(m):find('Convolution') and m.bias then m.bias:zero() end end)     -- convolution bias is removed during training
 netG:evaluate() -- batch normalization behaves differently during evaluation
 
 print('Setting inputs..')
@@ -62,6 +62,7 @@ inputs = torch.rand(opt.ss, nz + opt.nc, 1, 1, 1)
 if opt.zsample == 'uniform2' then
   inputs:uniform(-1,1)
 elseif opt.zsample == 'normal' then
+  print('sampling normal')
   inputs:normal(0,1)
 end
 --if opt.normal then
@@ -84,6 +85,8 @@ if opt.nc > 0 then
     inputs[{i, nz + opt.cat}]:fill(1)
   end
 end
+
+print(inputs[1])
 
 print('Forward prop')
 for i = 1, math.ceil(opt.ss / opt.bs) do

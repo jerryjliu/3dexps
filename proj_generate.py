@@ -182,16 +182,19 @@ if __name__ == "__main__":
     print(output_nd.shape)
     # save input voxels
     inp_nd = inp.cpu().numpy()
-    #sio.savemat(os.path.join(data_dir, opt.input+'.mat'), mdict={'inputs': latent_nd, 'voxels': inp_nd}) 
     sio.savemat(fullfname+'.mat', mdict={'inputs': latent_nd, 'voxels': output_nd}) 
     # TODO: SAVE IN READABLE FORAMT
     if opt.outformat == "pickle":
         torch.save(output, fullfname + '.pic')
         #torch.save(fullfname + '.pic', output)
     elif opt.outformat == "json": 
+        sio.savemat(os.path.join(data_dir, opt.input+'.mat'), mdict={'inputs': latent_nd, 'voxels': inp_nd}) 
         output_nd = output_nd.reshape((64,64,64))
         print(output_nd.shape)
+        outdict = {}
+        outdict['voxels'] = output_nd.tolist()
+        outdict['inputs'] = latent_nd.squeeze().tolist()
         with open(fullfname + '.json', 'w') as outf:
-            json.dump(output_nd.tolist(), outf)
+            json.dump(outdict, outf)
 
     print('saving done')

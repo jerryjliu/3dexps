@@ -87,10 +87,10 @@ local function weights_init(m)
     m.weight:normal(0.0, std)
     print(m)
     print(std)
-    if m.bias then 
+    --if m.bias then 
       --m.bias:fill(0) 
-      m.bias:fill(0)
-    end
+    m:noBias()
+    --end
   elseif name:find('BatchNormalization') then
     --if m.weight then m.weight:fill(0) end
     --if m.bias then m.bias:fill(0) end
@@ -175,9 +175,9 @@ if opt.gpu > 0 then
   noise = noise:cuda()
   label = label:cuda()
   netG = netG:cuda()
-  netG = cudnn.convert(netG, cudnn)
+  --netG = cudnn.convert(netG, cudnn)
   netD = netD:cuda()
-  netD = cudnn.convert(netD, cudnn)
+  --netD = cudnn.convert(netD, cudnn)
   criterion = criterion:cuda()
 end
 local parametersD, gradParametersD = netD:getParameters()
@@ -218,8 +218,8 @@ local fDx = function(x)
     print('SHOULD NOT HIT THIS')
     noise:uniform(-1,1)
   end
-  local fake = netG:forward(noise)
-  input:copy(fake)
+  local fake = netG:forward(noise[{{1,actualBatchSize}}])
+  input[{{1,actualBatchSize}}]:copy(fake)
   label:fill(fake_label)
   local fout = netD:forward(input[{{1,actualBatchSize}}])
   local errD_fake = criterion:forward(fout, label[{{1,actualBatchSize}}])
