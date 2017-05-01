@@ -5,6 +5,7 @@ require 'paths'
 assert(pcall(function () mat = require('fb.mattorch') end) or pcall(function() mat = require('matio') end), 'no mat IO interface available')
 
 opt = {
+  leastsquares = false,
   leakyslope = 0.2,
   elr = 0.00005,
   glr = 0.001,
@@ -72,6 +73,25 @@ local function weights_init(m)
   end
 end
 
+local function weights_init2(m)
+  local name = torch.type(m)
+  if name:find('Convolution') then
+    fan_in = m.kW * m.kT * m.kH * m.nInputPlane
+    fan_out = m.kW * m.kT * m.kH * m.nOutputPlane
+    std = math.sqrt(4 / (fan_in + fan_out))
+    m.weight:normal(0.0, std)
+    print(m)
+    print(std)
+    if m.bias then 
+      --m.bias:fill(0) 
+      m.bias:noBias()
+    end
+  elseif name:find('BatchNormalization') then
+    --if m.weight then m.weight:fill(0) end
+    --if m.bias then m.bias:fill(0) end
+  end
+end
+
 local KLD = nil
 local function find_KLD_loss(net)
   if KLD ~= nil then
@@ -90,7 +110,8 @@ netBuilder = require 'netbuilder'
 net = netBuilder.buildnet(opt)
 -- Generator
 local netG = net.netG
-netG:apply(weights_init)
+--netG:apply(weights_init)
+netG:apply(weights_init2)
 -- Discriminator (same as Generator but uses LeakyReLU)
 local netD = net.netD
 netD:apply(weights_init)
@@ -125,6 +146,23 @@ optimStateE = {
   beta1 = opt.beta1,
 }
 
+------------------------------
+--If least squares GAN, then remove Sigmoid layer in discriminator
+------------------------------
+if opt.leastsquares then
+  print("REMOVING SIGMOID")
+  numLayers = netD:size()
+  for i = 1, numLayers do 
+    m = netD:get(i)
+    local name = torch.type(m)
+    if name:find('Sigmoid') then
+      netD:remove(i)
+      break
+    end
+  end
+end
+
+
 if opt.checkpointn > 0 then
   netG = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_G.t7'))
   netD = torch.load(paths.concat(opt.checkpointd .. opt.checkpointf, opt.name .. '_' .. opt.checkpointn .. '_net_D.t7'))
@@ -140,6 +178,9 @@ end
 -- ex: input, noise, label, errG, errD, (epoch_tm, tm, data_tm - purely for timing purposes)
 -- criterion
 local criterion = nn.BCECriterion()
+if opt.leastsquares then
+  criterion = nn.MSECriterion()
+end
 -- real batch - input to encoder
 local real = torch.Tensor(opt.batchSize, 1, opt.nout, opt.nout, opt.nout)
 local actualBatchSize = 0
